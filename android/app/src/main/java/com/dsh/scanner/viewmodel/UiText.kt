@@ -4,14 +4,20 @@ import android.content.Context
 import androidx.annotation.StringRes
 
 /**
- * Text produced by the ViewModel without holding a Context. The View resolves it
- * at the last possible moment, which keeps the ViewModel unit-testable and all
- * copy in `strings.xml`.
+ * ViewModel 产出的文本，不持有 Context；View 在最后一步调用 [resolve]。
+ * 这样文案统一放在 `strings.xml`，ViewModel 也能在纯 JVM 测试里比较。
  */
 sealed interface UiText {
 
-    /** A string resource plus optional format arguments; arguments can be [UiText]. */
-    class Res(@StringRes val id: Int, vararg args: Any) : UiText {
+    /** 一个 `strings.xml` 资源加上可选的格式化参数。 */
+    class Res(
+        /** 字符串资源 id，例如 `R.string.status_saved`。 */
+        @StringRes val id: Int,
+
+        /** 格式化参数，顺序对应资源里的 `%1$s`、`%2$.2f` 等占位符。 */
+        vararg args: Any,
+    ) : UiText {
+        /** 已固定下来的参数列表，参与 equals/hashCode。 */
         val arguments: List<Any> = args.toList()
 
         override fun equals(other: Any?): Boolean {
@@ -25,9 +31,14 @@ sealed interface UiText {
         override fun toString(): String = "UiText.Res(id=$id, args=$arguments)"
     }
 
-    data class Raw(val value: String) : UiText
+    /** 不需要资源解析的原始文本，用于动态内容或空字符串。 */
+    data class Raw(
+        /** 直接展示的文本。 */
+        val value: String,
+    ) : UiText
 }
 
+/** 把 [UiText] 解析成当前 Context 的字符串；嵌套的 [UiText] 参数会递归解析。 */
 fun UiText.resolve(context: Context): String = when (this) {
     is UiText.Res -> {
         val resolved = arguments

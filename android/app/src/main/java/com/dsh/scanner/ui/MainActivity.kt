@@ -29,11 +29,19 @@ import org.opencv.android.OpenCVLoader
  */
 class MainActivity : AppCompatActivity() {
 
+    /** 当前 Activity 的 ViewBinding。 */
     private lateinit var binding: ActivityMainBinding
+
+    /** 扫描状态机；配置变化时由 ViewModelStore 保留。 */
     private lateinit var viewModel: MainViewModel
+
+    /** CameraX 绑定/拍照适配器。 */
     private lateinit var cameraController: CameraController
+
+    /** 上一次渲染的结果文件名，用于检测「结果页 -> 取景页」并停止动画。 */
     private var lastResultName: String? = null
 
+    /** CameraX 回调无条件转发给 ViewModel。 */
     private val cameraListener = object : CameraController.Listener {
         override fun onCameraBound() = viewModel.onCameraBound()
 
@@ -44,6 +52,7 @@ class MainActivity : AppCompatActivity() {
         override fun onPhotoError(message: String) = viewModel.onPhotoCaptureError(message)
     }
 
+    /** 相机权限结果回调；授权后才允许绑定相机。 */
     private val permissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestPermission(),
     ) { granted ->

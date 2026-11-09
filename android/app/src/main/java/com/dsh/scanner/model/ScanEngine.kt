@@ -18,25 +18,49 @@ import java.io.File
  * [analyzeBitmap]. All public operations are serialized so the tracker/model
  * state is never touched from two threads at once.
  */
-class ScanEngine(private val appContext: Context) {
+class ScanEngine(
+    /** 应用 Context，仅用于读取 assets 和创建输出目录。 */
+    private val appContext: Context,
+) {
 
+    /** 经典边缘检测器（低对比度兜底未开启）。 */
     private val detector = DocDetector()
+
+    /** 时序平滑、评分和拍摄状态机。 */
     private val tracker = DocTracker()
+
+    /** 陀螺仪角速度来源，用于判断手持是否稳定。 */
     private val motion = MotionGate(appContext)
 
+    /** DocAligner 角点模型；null 表示尚未加载或加载失败。 */
     @Volatile
     private var modelDetector: DocModelDetector? = null
 
+    /** 上一帧时间戳，用来计算帧间隔 dt。 */
     private var lastTs = 0L
+
+    /** 检测耗时的 EMA（ms），显示在 HUD 上。 */
     private var emaMs = 33f
+
+    /** 已分析的帧数，用于控制角点模型每 3 帧跑一次。 */
     private var frames = 0
+
+    /** 首帧尺寸日志只打一次。 */
     private var logged = false
+
+    /** 最近一次模型推理耗时（ms）。 */
     private var lastModelMs = 0f
+
+    /** 上次模型输出的四边形，供中间帧复用。 */
     private var cachedModelQuad: Quad? = null
+
+    /** 上次模型输出的置信度。 */
     private var cachedModelConf = 0f
+
+    /** 上次模型结果对应的帧号。 */
     private var cachedModelFrame = -100
 
-    /** Latest smoothed quad; kept outside the engine lock so the shutter never waits. */
+    /** 最新平滑四边形；放在引擎锁外，保证按快门不必等模型推理。 */
     @Volatile
     private var latestQuad: Quad? = null
 

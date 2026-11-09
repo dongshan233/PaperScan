@@ -28,30 +28,64 @@ import java.util.concurrent.Executors
  * scans pages or decides when to capture: those decisions live in the ViewModel.
  */
 class CameraController(
+    /** 应用 Context：获取 CameraProvider、写缓存照片。 */
     private val appContext: Context,
+
+    /** 相机绑定的生命周期宿主。 */
     private val lifecycleOwner: LifecycleOwner,
+
+    /** 预览用的 PreviewView。 */
     private val previewView: PreviewView,
+
+    /** ViewModel 提供的分析器；绑定后挂到 ImageAnalysis。 */
     private val analyzer: ImageAnalysis.Analyzer,
+
+    /** 绑定/拍照结果回调。 */
     private val listener: Listener,
 ) {
 
     interface Listener {
+        /** CameraX 绑定成功，可以开始接收分析帧。 */
         fun onCameraBound()
+
+        /** 绑定或启动失败；message 用于状态栏。 */
         fun onCameraError(message: String)
+
+        /** 拍照、解码和 EXIF 旋转完成，位图所有权交给回调方。 */
         fun onPhotoReady(bitmap: Bitmap)
+
+        /** 拍照或解码失败。 */
         fun onPhotoError(message: String)
     }
 
+    /** 单线程分析器执行器，CameraX 分析流串行。 */
     private val analysisExecutor: ExecutorService = Executors.newSingleThreadExecutor()
+
+    /** 单线程拍照/解码执行器，避免阻塞主线程。 */
     private val captureExecutor: ExecutorService = Executors.newSingleThreadExecutor()
+
+    /** 主线程执行器，用于 CameraProvider future 回调。 */
     private val mainExecutor = ContextCompat.getMainExecutor(appContext)
 
+    /** CameraX provider；unbind 后置空，下次 bind 重新获取。 */
     private var provider: ProcessCameraProvider? = null
+
+    /** 全分辨率拍照 use case。 */
     private var imageCapture: ImageCapture? = null
+
+    /** 实时分析 use case。 */
     private var imageAnalysis: ImageAnalysis? = null
+
+    /** 已绑定的相机，用于手电筒控制。 */
     private var camera: Camera? = null
+
+    /** 期望的绑定状态；异步回调回来时若已 unbind 就丢弃。 */
     private var wanted = false
+
+    /** ImageAnalysis 当前是否挂着 [analyzer]。 */
     private var analyzing = false
+
+    /** 期望的手电筒状态；重新绑定后恢复。 */
     private var torchOn = false
 
     /** Binds the back camera once; repeated calls while bound are no-ops. */

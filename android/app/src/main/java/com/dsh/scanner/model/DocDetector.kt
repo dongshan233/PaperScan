@@ -20,16 +20,34 @@ import kotlin.math.roundToInt
  * This is the Kotlin port of scanner/pipeline.py (D1/D2 tiers).
  */
 class DocDetector(
+    /** 白桌白纸场景：额外合并一组宽松 Canny 边缘，提高召回。 */
     private val lowContrast: Boolean = false,
+
+    /** 纸张面积占整帧的最小比例，低于此值不参与候选。 */
     private val minAreaRatio: Double = 0.15,
+
+    /** 候选四边形四条边的边缘支撑率下限。 */
     private val minSupport: Double = 0.40,
 ) {
 
-    data class Detection(val quad: Quad, val support: Double, val areaRatio: Double)
+    data class Detection(
+        /** 精修后的四边形（tl/tr/br/bl）。 */
+        val quad: Quad,
 
+        /** 四条边的边缘支撑率，0..1。 */
+        val support: Double,
+
+        /** 四边形面积占整帧比例，0..1。 */
+        val areaRatio: Double,
+    )
+
+    /** 检测调用帧数，每 30 帧打一条统计日志。 */
     private var frames = 0
+
+    /** 上一次的统计字符串。 */
     private var lastStats = ""
 
+    /** @param gray 单通道灰度图（已按旋转摆正）。 */
     fun detect(gray: Mat): Detection? {
         val w = gray.cols()
         val h = gray.rows()

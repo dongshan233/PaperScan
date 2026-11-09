@@ -40,11 +40,16 @@ import java.util.concurrent.atomic.AtomicBoolean
  * arrive through [imageAnalyzer]; when a capture is warranted the ViewModel
  * emits [ScanEvent.CapturePhoto] and the View performs the CameraX call.
  */
-class MainViewModel(private val engine: ScanEngine) : ViewModel() {
+class MainViewModel(
+    /** 模型层：帧分析、模型加载和全分辨率处理。 */
+    private val engine: ScanEngine,
+) : ViewModel() {
 
+    /** 供 View 持续观察的 UI 状态。 */
     private val _uiState = MutableStateFlow(ScanUiState())
     val uiState: StateFlow<ScanUiState> = _uiState.asStateFlow()
 
+    /** 一次性事件：拍照、结果显示和虚拟帧；View 按生命周期收集。 */
     private val _events = Channel<ScanEvent>(Channel.BUFFERED)
     val events = _events.receiveAsFlow()
 
@@ -66,21 +71,46 @@ class MainViewModel(private val engine: ScanEngine) : ViewModel() {
         }
     }
 
+    /** 防止自动触发和手动快门重复拍照。 */
     private val capturing = AtomicBoolean(false)
 
+    /** 是否接收分析帧；拍照中、结果页和解绑后为 false。 */
     @Volatile private var acceptingFrames = false
+
+    /** 已识别成功并冻结；点「重新扫描」才解除。 */
     @Volatile private var frozen = false
+
+    /** 自检/虚拟模式期间为 true，避免逐帧状态覆盖自定义提示。 */
     @Volatile private var suppressStatus = false
+
+    /** 当前是否运行虚拟相机调试入口。 */
     @Volatile private var virtualMode = false
+
+    /** 当前帧来源；决定拍照走 CameraX 还是直接处理内置 Bitmap。 */
     @Volatile private var frameSource = FrameSource.CAMERA
+
+    /** 最近一帧分析图宽度（px，已按旋转摆正），用于缩放四边形。 */
     @Volatile private var analysisW = 640
+
+    /** 最近一帧分析图高度（px，已按旋转摆正）。 */
     @Volatile private var analysisH = 480
+
+    /** 当前拍照使用的四边形（分析帧坐标）。 */
     @Volatile private var pendingQuad: Quad? = null
+
+    /** 虚拟模式使用的内置图；同时作为 debugImage 的显示源。 */
     @Volatile private var virtualBitmap: Bitmap? = null
 
+    /** 虚拟相机循环任务，重新扫描/退出时取消。 */
     private var virtualJob: Job? = null
+
+    /** 搜索态状态栏里的模型文案（未加载/加载中/耗时/失败）。 */
     private var modelText: UiText = UiText.Res(R.string.model_not_loaded)
+
+    /** DocAligner 模型是否已成功加载。 */
     private var modelLoaded = false
+
+    /** 模型是否正在加载，避免并发重复创建 ORT session。 */
     private var modelLoading = false
 
     // ---------------------------------------------------------------- lifecycle
@@ -589,7 +619,13 @@ class MainViewModel(private val engine: ScanEngine) : ViewModel() {
         DocTracker.State.COUNTDOWN -> UiText.Res(R.string.state_countdown)
     }
 
-    private enum class FrameSource { CAMERA, VIRTUAL }
+    private enum class FrameSource {
+        /** 真实 CameraX 分析流；拍照要发事件给 View。 */
+        CAMERA,
+
+        /** 内置图片虚拟流；拍照直接处理 [virtualBitmap]。 */
+        VIRTUAL,
+    }
 
     companion object {
         private const val TAG = "PaperScan"

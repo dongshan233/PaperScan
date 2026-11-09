@@ -17,14 +17,24 @@ import kotlin.math.hypot
  */
 object ScanCapture {
 
+    /** 横版 A4 输出长边（150 dpi 左右）。 */
     const val A4_LONG = 1754
+
+    /** 竖版 A4 输出短边。 */
     const val A4_SHORT = 1240
 
+    /** 扫描件的色彩模式（应用默认 GRAY）；点按滤镜按钮按 COLOR → ENHANCE → GRAY 循环。 */
     enum class Filter {
+        /** 原彩：只做透视矫正，不调色。 */
         COLOR,
+
+        /** 增强：LAB 只压平 L 通道，保留 a/b 色度，并轻微锐化。 */
         ENHANCE,
+
+        /** 黑白：灰度 + 背景除法 + 锐化，传统扫描件观感（应用默认）。 */
         GRAY;
 
+        /** 返回循环中的下一个模式。 */
         fun next(): Filter = when (this) {
             COLOR -> ENHANCE
             ENHANCE -> GRAY
@@ -32,14 +42,32 @@ object ScanCapture {
         }
     }
 
-    data class Result(val bitmap: Bitmap, val file: File, val quad: Quad)
+    data class Result(
+        /** 矫正并应用滤镜后的位图，交给结果页显示。 */
+        val bitmap: Bitmap,
 
+        /** 已写盘的 JPEG 文件。 */
+        val file: File,
+
+        /** 全分辨率下精修后的纸张四边形。 */
+        val quad: Quad,
+    )
+
+    /**
+     * 全分辨率处理：直线精修 → 透视变换到 A4 → 去阴影/锐化 → 保存 JPEG。
+     *
+     * @param src 全分辨率 BGR 图。
+     * @param coarse 检测阶段得到的粗四边形。
+     * @param outDir JPEG 输出目录，不存在会自动创建。
+     * @param detector 提供 [DocDetector.refine] 的检测器实例。
+     * @param filter 色彩模式，默认 [Filter.GRAY]。
+     */
     fun process(
         src: Mat,
         coarse: Quad,
         outDir: File,
         detector: DocDetector,
-        filter: Filter = Filter.ENHANCE,
+        filter: Filter = Filter.GRAY,
     ): Result {
         val gray = Mat()
         Imgproc.cvtColor(src, gray, Imgproc.COLOR_BGR2GRAY)

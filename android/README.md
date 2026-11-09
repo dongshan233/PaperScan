@@ -227,10 +227,11 @@ adb shell am start -n com.dsh.scanner/.ui.MainActivity --ez forcecapture true
 | 模式 | 处理 |
 |---|---|
 | 原彩 | 只做透视变换，不调色 |
-| 增强（默认） | LAB 空间只压平 L 通道（去阴影/光照不均），保留 a/b 色度，轻微锐化 |
-| 黑白 | 转灰度 → 背景除法 → 锐化（传统扫描件观感） |
+| 增强 | LAB 空间只压平 L 通道（去阴影/光照不均），保留 a/b 色度，轻微锐化 |
+| 黑白（默认） | 转灰度 → 背景除法 → 锐化（传统扫描件观感） |
 
-之前默认是黑白，因为 `enhance()` 里直接 `cvtColor(BGR2GRAY)` 了；现在默认走彩色增强。
+默认走黑白；需要保留颜色时切到「原彩」或「增强」。默认值在
+`ScanUiState.filter` 和 `ScanCapture.process()` 的 `filter` 参数两处保持一致。
 
 ## 已知限制
 

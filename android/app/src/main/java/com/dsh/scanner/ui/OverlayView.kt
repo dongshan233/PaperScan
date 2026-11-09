@@ -21,15 +21,34 @@ class OverlayView @JvmOverloads constructor(
     defStyle: Int = 0,
 ) : View(context, attrs, defStyle) {
 
+    /** 当前要绘制的四边形；null 表示不画检测框。 */
     private var quad: Quad? = null
+
+    /** 当前分析帧宽度（px），用于映射到 View 坐标。 */
     private var imgW = 480
+
+    /** 当前分析帧高度（px）。 */
     private var imgH = 360
+
+    /** 跟踪状态，决定颜色、状态名和提示语。 */
     private var state = DocTracker.State.SEARCH
+
+    /** 综合评分，0..1。 */
     private var score = 0f
+
+    /** 倒计时进度，0..1；大于 0 时画倒计时环。 */
     private var progress = 0f
+
+    /** 边缘支撑率，0..1。 */
     private var support = 0f
+
+    /** 稳定度，1 表示完全静止。 */
     private var stability = 0f
+
+    /** Laplacian 清晰度。 */
     private var sharpness = 0f
+
+    /** 检测耗时的 EMA（含模型兜底）。 */
     private var frameMs = 0f
 
     private val stroke = Paint(Paint.ANTI_ALIAS_FLAG).apply {

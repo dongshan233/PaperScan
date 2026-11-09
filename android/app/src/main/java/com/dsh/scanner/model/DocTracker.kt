@@ -8,37 +8,95 @@ import kotlin.math.hypot
  * Port of the Tracker in scanner/pipeline.py.
  */
 class DocTracker(
+    /** 综合评分的过线阈值，达到后才开始累计稳定帧。 */
     private val scoreOn: Float = 0.72f,
+
+    /** 连续多少帧过线才进入倒计时。 */
     private val stableFrames: Int = 5,
+
+    /** 倒计时时长；期间掉线会立即中止。 */
     private val countdownMs: Long = 700L,
+
+    /** 拍完后的冷却时长，避免连续触发。 */
     private val cooldownMs: Long = 1500L,
+
+    /** 陀螺仪角速度上限（°/s），超过则判定为手抖。 */
     private val imuGate: Float = 25f,
 ) {
-    enum class State { SEARCH, TRACKING, LOCKED, COUNTDOWN }
+    enum class State {
+        /** 当前帧没有可用纸张。 */
+        SEARCH,
+
+        /** 检测到纸张，但评分还没到拍摄阈值。 */
+        TRACKING,
+
+        /** 评分已过线，正在累计稳定帧。 */
+        LOCKED,
+
+        /** 倒计时中，归零后触发拍摄。 */
+        COUNTDOWN,
+    }
 
     data class Snapshot(
+        /** 当前平滑后的纸张四边形（tl/tr/br/bl）；连续丢帧后为 null。 */
         val quad: Quad?,
+
+        /** EMA 平滑后的综合评分，0..1。 */
         val score: Float,
+
+        /** 当前跟踪/拍摄状态机状态。 */
         val state: State,
+
+        /** 倒计时进度，0..1；0 表示未在倒计时。 */
         val progress: Float,
+
+        /** 本帧是否应触发拍摄（倒计时刚归零）。 */
         val shouldCapture: Boolean,
+
+        /** 稳定度，1 表示完全静止，0 表示抖动很大。 */
         val stability: Float,
+
+        /** 纸张边缘的支撑率，0..1。 */
         val support: Float,
+
+        /** 纸张区域的 Laplacian 方差，越大越清晰。 */
         val sharpness: Float,
+
+        /** 当前陀螺仪角速度，单位 °/s。 */
         val omega: Float,
     )
 
+    /** 当前平滑后的四边形，供快照和手动拍照读取。 */
     private var smooth: Quad? = null
+
+    /** 上一帧原始检测四边形，用于判断跳变。 */
     private var prev: Quad? = null
+
+    /** 连续丢帧计数；超过 3 帧清空平滑框。 */
     private var lost = 0
+
+    /** 四边形移动速度的 EMA（px/帧）。 */
     private var vel = 0f
+
+    /** 综合评分的 EMA，0..1。 */
     private var scoreEma = 0f
+
+    /** 连续过线帧数。 */
     private var stable = 0
+
+    /** 已累计的倒计时时长（ms）。 */
     private var countdown = 0L
+
+    /** 拍照后的剩余冷却时长（ms）。 */
     private var cooldown = 0L
+
+    /** 最近一次有效检测的边缘支撑率，丢帧时衰减沿用。 */
     private var lastSupport = 0f
+
+    /** 最近一次有效检测的面积占比，丢帧时沿用。 */
     private var lastArea = 0f
 
+    /** 当前平滑四边形；没有跟踪目标时为 null。 */
     fun currentQuad(): Quad? = smooth
 
     fun reset() {
@@ -51,6 +109,14 @@ class DocTracker(
         countdown = 0L
     }
 
+    /**
+     * 吃进一帧检测结果，输出平滑后的状态机快照。
+     *
+     * @param det 本帧检测；null 表示丢失。
+     * @param sharpness 纸张区域的 Laplacian 方差。
+     * @param omegaDeg 当前陀螺仪角速度（°/s）。
+     * @param dtMs 距上一帧的毫秒数，内部会夹到 1..200。
+     */
     fun update(
         det: DocDetector.Detection?,
         sharpness: Float,

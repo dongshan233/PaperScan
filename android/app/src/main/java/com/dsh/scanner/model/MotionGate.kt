@@ -10,10 +10,14 @@ import kotlin.math.sqrt
 /** Gyroscope magnitude in deg/s, EMA-smoothed. 0 when no sensor is present. */
 class MotionGate(context: Context) : SensorEventListener {
 
+    /** 传感器管理器；设备不提供时为 null。 */
     private val manager =
         context.getSystemService(Context.SENSOR_SERVICE) as? SensorManager
+
+    /** 默认陀螺仪；没有硬件陀螺仪时为 null。 */
     private val sensor: Sensor? = manager?.getDefaultSensor(Sensor.TYPE_GYROSCOPE)
 
+    /** 三轴角速度模长的 EMA（°/s），无传感器时保持 0。 */
     @Volatile
     var angularSpeedDeg: Float = 0f
         private set

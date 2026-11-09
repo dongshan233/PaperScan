@@ -47,7 +47,7 @@
             android:id="@+id/filterButton"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="@string/filter_enhance" />
+            android:text="@string/filter_gray" />
 
         <Button
             android:id="@+id/torchButton"

@@ -46,26 +46,44 @@ class RectifyView @JvmOverloads constructor(
         color = Color.parseColor("#7CE38B")
     }
 
+    /** 动画源图（含透视畸变），由本 View 负责回收。 */
     private var source: Bitmap? = null
+
+    /** 最终扫描件，由本 View 负责回收。 */
     private var result: Bitmap? = null
 
     /** 纸的四个角，源图像素坐标。 */
     private val quadPx = FloatArray(8)
 
-    /** 源图四边形 / 目标矩形，均已换算到 View 坐标。 */
+    /** 源图四边形，已换算到 View 坐标。 */
     private val fromPts = FloatArray(8)
+
+    /** 目标 A4 矩形，已换算到 View 坐标。 */
     private val toPts = FloatArray(8)
+
+    /** 当前插值出的四边形，每帧更新。 */
     private val curPts = FloatArray(8)
 
+    /** 源图在 View 中的 fitCenter 区域。 */
     private val srcRect = RectF()
+
+    /** 扫描件在 View 中的 fitCenter 区域。 */
     private val dstRect = RectF()
+
     private val matrix = Matrix()
     private val pagePath = Path()
     private val ease = DecelerateInterpolator(1.9f)
 
+    /** 动画进度，0..1。 */
     private var progress = 0f
+
+    /** 正在播放的扶正动画；重新 play/stop 时取消。 */
     private var animator: ValueAnimator? = null
+
+    /** View 尺寸还没准备好时暂存启动请求。 */
     private var pendingStart = false
+
+    /** 动画已取消，避免 onAnimationEnd 回调误触发 onFinished。 */
     private var cancelled = false
 
     /**

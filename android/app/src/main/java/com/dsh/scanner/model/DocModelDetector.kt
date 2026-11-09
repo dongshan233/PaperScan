@@ -17,7 +17,7 @@ import java.nio.FloatBuffer
  *
  * Input : 256x256 BGR, scaled to [0,1], NCHW, **no mean/std normalisation**
  * Output: 4 x 128x128 corner heatmaps
- * Decode: resize each heatmap back, threshold at 0.3, take the centroid of the
+ * Decode: resize each heatmap back, threshold at 0.15, take the centroid of the
  *         largest blob -> corner in input-image coordinates
  *
  * It is used as the fallback when the classical edge detector finds nothing
@@ -27,15 +27,25 @@ import java.nio.FloatBuffer
 class DocModelDetector(context: Context) {
 
     companion object {
+        /** 网络输入边长（正方形）。 */
         const val INPUT = 256
+
+        /** 每个角点热力图的输出边长。 */
         const val HEAT = 128
+
+        /** 角点峰值低于此值视为未检出。 */
         const val THRESHOLD = 0.15f
+
         private const val ASSET = "docaligner_fastvit_t8.onnx"
     }
 
+    /** 推理调用计数，每 10 次打一条日志。 */
     private var runs = 0
 
+    /** OnnxRuntime 进程级环境。 */
     private val env: OrtEnvironment = OrtEnvironment.getEnvironment()
+
+    /** fastvit_t8 推理 session。 */
     private val session: OrtSession
 
     init {
@@ -47,8 +57,18 @@ class DocModelDetector(context: Context) {
         android.util.Log.i("PaperScan", "model on CPU")
     }
 
-    data class Result(val quad: Quad, val confidence: Float)
+    data class Result(
+        /** 模型解码出的纸张四边形（tl/tr/br/bl，原图坐标）。 */
+        val quad: Quad,
 
+        /** 参与计算的热力图峰值均值，0..1。 */
+        val confidence: Float,
+    )
+
+    /**
+     * @param bgr 分析帧的 BGR 图（会被裁成正方形送入网络）。
+     * @param roi 上一帧四边形；有值时按它外扩裁剪，让纸张填满输入。
+     */
     fun detect(bgr: Mat, roi: Quad? = null): Result? {
         val w = bgr.cols()
         val h = bgr.rows()
