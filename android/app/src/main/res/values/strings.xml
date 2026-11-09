@@ -2,11 +2,57 @@
 <resources>
     <string name="app_name">试卷扫描</string>
     <string name="status_idle">把试卷放入取景框</string>
+    <string name="status_search">把试卷放入取景框 · %1$s</string>
+    <string name="status_tracking">识别中，请放稳</string>
+    <string name="status_locked">已锁定，即将自动拍摄</string>
+    <string name="status_countdown">保持不动…</string>
+    <string name="status_capturing">拍摄中…</string>
+    <string name="status_processing">处理中…</string>
+    <string name="status_saved">已保存：%1$s</string>
+    <string name="status_processing_failed">处理失败：%1$s</string>
+    <string name="status_capture_failed">拍照失败</string>
+    <string name="status_camera_failed">相机启动失败: %1$s</string>
+    <string name="status_permission_required">需要相机权限才能扫描</string>
+    <string name="status_opencv_failed">OpenCV 初始化失败</string>
+    <string name="status_done">识别完成</string>
+    <string name="status_selftest_running">自检中…</string>
+    <string name="status_selftest_no_paper">自检：未检出纸张</string>
+    <string name="status_selftest_ok">自检：检出 %1$d ms，支撑 %2$.2f，面积 %3$.2f\n%4$s</string>
+    <string name="status_selftest_failed">自检失败：%1$s</string>
+    <string name="status_virtual_loading">虚拟模式启动中…</string>
+    <string name="status_virtual">虚拟模式 %1$s · 评分 %2$.2f</string>
+    <string name="status_virtual_countdown">虚拟模式 %1$s · 评分 %2$.2f · 倒计时</string>
+    <string name="status_virtual_failed">虚拟模式启动失败</string>
+
+    <string name="model_not_loaded">未加载</string>
+    <string name="model_loading">模型加载中…</string>
+    <string name="model_loaded">模型已加载 %1$d ms</string>
+    <string name="model_failed">模型加载失败</string>
+
+    <string name="state_search">搜索中</string>
+    <string name="state_tracking">跟踪中</string>
+    <string name="state_locked">已锁定</string>
+    <string name="state_countdown">倒计时</string>
+
+    <string name="hud_hint_search">把试卷完整放入取景框</string>
+    <string name="hud_hint_tracking">识别中，请放稳</string>
+    <string name="hud_hint_locked">已锁定，保持不动</string>
+    <string name="hud_hint_countdown">保持不动，正在拍摄…</string>
+    <string name="hud_score">综合分 %1$.2f</string>
+    <string name="hud_support">边缘支撑 %1$.2f</string>
+    <string name="hud_shake">抖动 %1$.2f</string>
+    <string name="hud_sharpness">清晰度 %1$d</string>
+    <string name="hud_frame_ms">%1$d ms/帧</string>
+    <string name="hud_capture">拍</string>
+
+    <string name="filter_color">原彩</string>
+    <string name="filter_enhance">增强</string>
+    <string name="filter_gray">黑白</string>
+
     <string name="capture">拍照</string>
     <string name="torch">补光</string>
-    <string name="filter_enhance">增强</string>
+    <string name="torch_on">补光·开</string>
     <string name="result_preview">扫描结果预览</string>
     <string name="rescan">重新扫描</string>
     <string name="result_caption">识别成功 · %1$s</string>
-    <string name="status_done">识别完成</string>
 </resources>

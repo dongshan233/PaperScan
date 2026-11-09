@@ -1,4 +1,4 @@
-package com.dsh.scanner
+package com.dsh.scanner.ui
 
 import android.content.Context
 import android.graphics.Canvas
@@ -9,7 +9,9 @@ import android.graphics.PointF
 import android.graphics.RectF
 import android.util.AttributeSet
 import android.view.View
-import kotlin.math.max
+import com.dsh.scanner.R
+import com.dsh.scanner.model.DocTracker
+import com.dsh.scanner.model.Quad
 import kotlin.math.min
 
 /** Draws the detected page outline plus the capture HUD over the preview. */
@@ -115,16 +117,16 @@ class OverlayView @JvmOverloads constructor(
         canvas.drawText(stateName(), tx, ty, text)
         ty += dp(22f)
         small.color = Color.WHITE
-        canvas.drawText("综合分 ${"%.2f".format(score)}", tx, ty, small)
+        canvas.drawText(context.getString(R.string.hud_score, score), tx, ty, small)
         ty += dp(18f)
         small.color = Color.parseColor("#D0D0D6")
-        canvas.drawText("边缘支撑 ${"%.2f".format(support)}", tx, ty, small)
+        canvas.drawText(context.getString(R.string.hud_support, support), tx, ty, small)
         ty += dp(16f)
-        canvas.drawText("抖动 ${"%.2f".format(1f - stability)}", tx, ty, small)
+        canvas.drawText(context.getString(R.string.hud_shake, 1f - stability), tx, ty, small)
         ty += dp(16f)
-        canvas.drawText("清晰度 ${sharpness.toInt()}", tx, ty, small)
+        canvas.drawText(context.getString(R.string.hud_sharpness, sharpness.toInt()), tx, ty, small)
         ty += dp(16f)
-        canvas.drawText("${frameMs.toInt()} ms/帧", tx, ty, small)
+        canvas.drawText(context.getString(R.string.hud_frame_ms, frameMs.toInt()), tx, ty, small)
 
         // score bar
         val bx = tx + dp(96f)
@@ -150,18 +152,13 @@ class OverlayView @JvmOverloads constructor(
             )
             text.color = colorForState()
             text.textAlign = Paint.Align.CENTER
-            canvas.drawText("拍", cx, cy + dp(8f), text)
+            canvas.drawText(context.getString(R.string.hud_capture), cx, cy + dp(8f), text)
             text.textAlign = Paint.Align.LEFT
             stroke.strokeWidth = dp(3f)
         }
 
         // hint
-        val hint = when (state) {
-            DocTracker.State.SEARCH -> "把试卷完整放入取景框"
-            DocTracker.State.TRACKING -> "识别中，请放稳"
-            DocTracker.State.LOCKED -> "已锁定，保持不动"
-            DocTracker.State.COUNTDOWN -> "保持不动，正在拍摄…"
-        }
+        val hint = context.getString(hintRes())
         small.color = Color.WHITE
         small.textSize = dp(16f)
         val tw = small.measureText(hint)
@@ -169,11 +166,20 @@ class OverlayView @JvmOverloads constructor(
         small.textSize = dp(12f)
     }
 
-    private fun stateName(): String = when (state) {
-        DocTracker.State.SEARCH -> "搜索中"
-        DocTracker.State.TRACKING -> "跟踪中"
-        DocTracker.State.LOCKED -> "已锁定"
-        DocTracker.State.COUNTDOWN -> "倒计时"
+    private fun stateName(): String = context.getString(
+        when (state) {
+            DocTracker.State.SEARCH -> R.string.state_search
+            DocTracker.State.TRACKING -> R.string.state_tracking
+            DocTracker.State.LOCKED -> R.string.state_locked
+            DocTracker.State.COUNTDOWN -> R.string.state_countdown
+        },
+    )
+
+    private fun hintRes(): Int = when (state) {
+        DocTracker.State.SEARCH -> R.string.hud_hint_search
+        DocTracker.State.TRACKING -> R.string.hud_hint_tracking
+        DocTracker.State.LOCKED -> R.string.hud_hint_locked
+        DocTracker.State.COUNTDOWN -> R.string.hud_hint_countdown
     }
 
     private fun dp(v: Float): Float = v * resources.displayMetrics.density

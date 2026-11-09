@@ -19,7 +19,7 @@
         android:visibility="gone"
         android:contentDescription="@string/result_preview" />
 
-    <com.dsh.scanner.OverlayView
+    <com.dsh.scanner.ui.OverlayView
         android:id="@+id/overlay"
         android:layout_width="match_parent"
         android:layout_height="match_parent" />
@@ -64,7 +64,7 @@
     </LinearLayout>
 
     <!-- 识别成功后的全屏结果页：先做"斜纸扶正"动画，再显示扫描件 -->
-    <com.dsh.scanner.RectifyView
+    <com.dsh.scanner.ui.RectifyView
         android:id="@+id/rectifyView"
         android:layout_width="match_parent"
         android:layout_height="match_parent"

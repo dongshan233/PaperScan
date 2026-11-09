@@ -1,4 +1,4 @@
-package com.dsh.scanner
+package com.dsh.scanner.model
 
 import ai.onnxruntime.OnnxTensor
 import ai.onnxruntime.OrtEnvironment

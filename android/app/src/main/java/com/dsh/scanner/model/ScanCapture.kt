@@ -1,4 +1,4 @@
-package com.dsh.scanner
+package com.dsh.scanner.model
 
 import android.graphics.Bitmap
 import org.opencv.core.Core
@@ -20,10 +20,16 @@ object ScanCapture {
     const val A4_LONG = 1754
     const val A4_SHORT = 1240
 
-    enum class Filter(val label: String) {
-        COLOR("原彩"),
-        ENHANCE("增强"),
-        GRAY("黑白"),
+    enum class Filter {
+        COLOR,
+        ENHANCE,
+        GRAY;
+
+        fun next(): Filter = when (this) {
+            COLOR -> ENHANCE
+            ENHANCE -> GRAY
+            GRAY -> COLOR
+        }
     }
 
     data class Result(val bitmap: Bitmap, val file: File, val quad: Quad)

@@ -1,4 +1,4 @@
-package com.dsh.scanner
+package com.dsh.scanner.ui
 
 import android.animation.Animator
 import android.animation.AnimatorListenerAdapter
@@ -14,6 +14,8 @@ import android.graphics.RectF
 import android.util.AttributeSet
 import android.view.View
 import android.view.animation.DecelerateInterpolator
+import com.dsh.scanner.model.Quad
+import com.dsh.scanner.model.ScanCapture
 import kotlin.math.min
 
 /**

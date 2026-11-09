@@ -1,4 +1,4 @@
-package com.dsh.scanner
+package com.dsh.scanner.model
 
 import android.graphics.Bitmap
 import androidx.camera.core.ImageProxy
@@ -173,6 +173,21 @@ object ImageOps {
         val mat = Mat()
         Utils.bitmapToMat(bmp, mat)
         return mat
+    }
+
+    /**
+     * Bitmap (ARGB_8888) -> BGR Mat.
+     *
+     * [Utils.bitmapToMat] produces RGBA, but the detector/capture pipeline speaks
+     * BGR. Feeding RGBA in directly swaps the red and blue channels, which is
+     * invisible on black-and-white exam paper but wrong for coloured content.
+     */
+    fun bitmapToBgr(bmp: Bitmap): Mat {
+        val rgba = bitmapToMat(bmp)
+        val bgr = Mat()
+        Imgproc.cvtColor(rgba, bgr, Imgproc.COLOR_RGBA2BGR)
+        rgba.release()
+        return bgr
     }
 
     fun matToBitmap(mat: Mat): Bitmap {

@@ -18,23 +18,64 @@ gradle :app:assembleDebug
 adb install -r -g app/build/outputs/apk/debug/app-debug.apk
 ```
 
-产物：`android/app/build/outputs/apk/debug/app-debug.apk`（约 140 MB，主要是 OpenCV 原生库）。
+产物：`android/app/build/outputs/apk/debug/app-debug.apk`（约 58 MB，主要是 OpenCV 原生库）。
 
 扫描件保存到 `Android/data/com.dsh.scanner/files/scans/`。
+
+## 架构（MVVM）
+
+```
+┌──────────────────────── ui/（View）────────────────────────┐
+│ MainActivity       ViewBinding、权限、渲染 StateFlow、转发点击 │
+│ CameraController   CameraX 绑定 / 拍照 / EXIF 方向 / 手电筒    │
+│ OverlayView        四边形、角点、评分、倒计时（纯绘制）        │
+│ RectifyView        斜纸扶正动画 + 扫描件（纯绘制）             │
+└──────────▲──────────────────────────────────┬──────────────┘
+           │ StateFlow<ScanUiState>            │ 用户意图
+           │ Channel<ScanEvent>                ▼
+┌──────────┴──────────── viewmodel/ ─────────────────────────┐
+│ MainViewModel      识别/倒计时/冻结/拍照/结果页状态机          │
+│ ScanUiState        可渲染状态（状态文本、滤镜、手电筒、覆盖层）│
+│ ScanEvent          一次性事件（拍照、显示结果、虚拟帧）        │
+│ UiText             资源文本 + 参数，View 端最后 resolve        │
+└──────────▲──────────────────────────────────┬──────────────┘
+           │ FrameResult                       │ processCapture()
+┌──────────┴──────────────── model/ ─────────────────────────┐
+│ ScanEngine         CameraX 帧适配、模型加载、全分辨率处理      │
+│ DocDetector        经典边缘检测 + 亚像素精修                  │
+│ DocTracker         EMA 平滑、评分、倒计时                     │
+│ DocModelDetector   DocAligner 角点模型兜底                    │
+│ ScanCapture        透视矫正 + 去阴影 + JPEG                   │
+└─────────────────────────────────────────────────────────────┘
+```
+
+依赖方向始终是 `ui → viewmodel → model`：
+
+- **View** 不持有检测器/跟踪器，也不拼状态文案；点击只调用 ViewModel 方法。
+- **ViewModel** 不持有 Activity/View，也不创建或绑定 CameraX use case；相机帧通过
+  注入的 `ImageAnalysis.Analyzer` 进入，状态用 `StateFlow`，拍照/结果这类一次性
+  动作走 `Channel<ScanEvent>`。
+- **Model** 不依赖 UI；`ScanEngine` 串行化检测、跟踪和模型推理，避免多线程共享状态。
+- 状态文案全部在 `res/values/strings.xml`，由 `UiText` 携带参数，View 负责解析。
 
 ## 代码结构
 
 | 文件 | 职责 |
 |---|---|
-| `MainActivity.kt` | CameraX 绑定、拍照流程、UI 状态机回调 |
-| `ScanAnalyzer.kt` | `ImageAnalysis.Analyzer`：YUV→灰度、检测、跟踪（后台线程） |
-| `DocDetector.kt` | 光照归一化 → Canny → 轮廓 → 四点凸四边形 → 边缘支撑评分 → 亚像素直线精修 |
-| `DocTracker.kt` | EMA 平滑、评分（支撑/面积/稳定度/IMU/清晰度/规整度）、倒计时状态机 |
-| `ScanCapture.kt` | 全分辨率精修 → 透视变换到 A4(1240×1754) → 去阴影 + 锐化 → JPEG |
-| `OverlayView.kt` | 四边形、角点、评分条、倒计时环、状态文案 |
-| `RectifyView.kt` | 结果页：把检测到的斜四边形插值到正视矩形做透视动画，再叠化到扫描件 |
-| `MotionGate.kt` | 陀螺仪角速度（用于"手持是否稳定"判定） |
-| `ImageOps.kt` | YUV→Mat、金字塔背景、Laplacian 方差、Bitmap 互转 |
+| `ui/MainActivity.kt` | View：ViewBinding、权限、观察状态、渲染与事件分发 |
+| `ui/CameraController.kt` | CameraX 绑定、拍照、EXIF 旋转、手电筒、分析流暂停/恢复 |
+| `viewmodel/MainViewModel.kt` | ViewModel：扫描状态机、自动/手动拍照、结果事件、调试入口 |
+| `viewmodel/ScanUiState.kt` | `StateFlow` 状态、覆盖层帧、滤镜文案映射 |
+| `viewmodel/ScanEvent.kt` | 一次性事件：拍照、显示结果、虚拟帧 |
+| `viewmodel/UiText.kt` | 字符串资源/原始文本，View 端 `resolve()` |
+| `model/ScanEngine.kt` | 模型层：帧分析、模型加载、全分辨率处理、自检 |
+| `model/DocDetector.kt` | 光照归一化 → Canny → 轮廓 → 四点凸四边形 → 边缘支撑评分 → 亚像素直线精修 |
+| `model/DocTracker.kt` | EMA 平滑、评分（支撑/面积/稳定度/IMU/清晰度/规整度）、倒计时状态机 |
+| `model/ScanCapture.kt` | 全分辨率精修 → 透视变换到 A4(1240×1754) → 去阴影 + 锐化 → JPEG |
+| `ui/OverlayView.kt` | 四边形、角点、评分条、倒计时环、状态文案 |
+| `ui/RectifyView.kt` | 结果页：把检测到的斜四边形插值到正视矩形做透视动画，再叠化到扫描件 |
+| `model/MotionGate.kt` | 陀螺仪角速度（用于"手持是否稳定"判定） |
+| `model/ImageOps.kt` | YUV→Mat、金字塔背景、Laplacian 方差、Bitmap 互转 |
 
 ## 关键参数
 
@@ -63,29 +104,32 @@ adb install -r -g app/build/outputs/apk/debug/app-debug.apk
 | 横屏输出 | ✅ analysis 640×480、still 3264×2448、矫正件 1754×1240（横版） |
 | 自动触发 | ✅ 虚拟相机模式：评分 0.99 → 倒计时 → 自动拍摄 → 保存 |
 | CameraX 拍照链路 | ✅ 真机拍照 → 解码 → 精修 → 透视 → 保存 |
+| MVVM 重构回归 | ✅ 自检 / 虚拟模式 / 强制拍照 / 自动拍照 / 手动拍照 / 重新扫描 |
 
 ## 调试入口（Intent extra）
 
 ```bash
 # 用内置图片跑一遍 检测→精修→透视→保存
-adb shell am start -n com.dsh.scanner/.MainActivity --ez selftest true
+adb shell am start -n com.dsh.scanner/.ui.MainActivity --ez selftest true
 
 # 虚拟相机：把内置图片当视频流喂进实时循环，验证自动触发
-adb shell am start -n com.dsh.scanner/.MainActivity --ez virtual true
+adb shell am start -n com.dsh.scanner/.ui.MainActivity --ez virtual true
 
 # 不依赖检测，用中心 80% 的框走一遍真实 CameraX 拍照链路
-adb shell am start -n com.dsh.scanner/.MainActivity --ez forcecapture true
+adb shell am start -n com.dsh.scanner/.ui.MainActivity --ez forcecapture true
 ```
 
 
 ## 识别成功后的结果页
 
-识别成功（自动触发或手动「拍照」）后走 `MainActivity.stopRecognition()`：
+识别成功（自动触发或手动「拍照」）后，`MainViewModel.showResult()` 做三件事：
 
-1. `imageAnalysis.clearAnalyzer()`：分析流立刻停掉，后续帧不再检测；
-2. 拍照 → 全分辨率直线精修 → 透视变换 → 去阴影（`ScanCapture.process`）；
-3. `provider.unbindAll()`：预览一起解绑，这次识别彻底结束；
-4. `RectifyView.play(原图, 精修四边形, 扫描件)` 播放动画，全屏显示结果。
+1. 置 `acceptingFrames = false`，后续帧不再检测/触发拍摄；
+2. 把 `previewActive` 置为 `false`——View 观察到状态变化后 `CameraController.unbind()`，
+   预览和分析流一起解绑；
+3. 裁剪动画源图（长边 ~1400px），通过 `Channel<ScanEvent>` 发出
+   `ShowResult(原图, 精修四边形, 扫描件)`；`MainActivity` 收到后调用
+   `RectifyView.play(...)` 播放动画并全屏显示结果。
 
 动画分两段（`RectifyView`）：
 
@@ -94,8 +138,8 @@ adb shell am start -n com.dsh.scanner/.MainActivity --ez forcecapture true
   视觉上就是那张斜着的纸被慢慢扶正；背景原图同步压暗。
 - **0.70–1.00**：交叉叠化到去阴影后的扫描件。
 
-动画结束后底部出现「重新扫描」，点击才 `tracker.reset()` 并重新绑定相机，
-回到取景状态。
+动画结束后底部出现「重新扫描」，点击才 `MainViewModel.onRescan()`：
+`ScanEngine.reset()` 清空跟踪器，状态切回取景，View 重新绑定相机。
 
 ## 角点模型（低对比度兜底）
 
