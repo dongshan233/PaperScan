@@ -1,0 +1,20 @@
+﻿# Python
+__pycache__/
+*.py[cod]
+
+# generated demo artefacts (mp4, annotated frames, screenshots)
+out/
+*.mp4
+
+# downloaded third-party weights and personal test photos
+models/
+data/
+
+# Android build output
+android/.gradle/
+android/build/
+android/app/build/
+android/local.properties
+*.apk
+*.iml
+.idea/

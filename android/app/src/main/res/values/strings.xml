@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">试卷扫描</string>
+    <string name="status_idle">把试卷放入取景框</string>
+    <string name="capture">拍照</string>
+    <string name="torch">补光</string>
+    <string name="result_preview">扫描结果预览</string>
+</resources>
