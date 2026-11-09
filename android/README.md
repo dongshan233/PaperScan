@@ -5,7 +5,10 @@ Kotlin + CameraX + OpenCV 的端侧实现，算法是仓库根目录 Python 原�
 ```
 预览 → 每帧检测纸张四边形 → 时序跟踪/平滑 → 评分 → 倒计时 → 自动拍照
      → 全分辨率直线精修 → 透视变换 → 去阴影 → 保存 JPEG
+     → 停止识别（解绑相机）→ 斜纸扶正动画 → 全屏显示扫描件
 ```
+
+识别成功一次就进入结果页：不再分析新帧、不再触发拍摄，点「重新扫描」才回到取景框。
 
 ## 构建 / 安装
 
@@ -29,6 +32,7 @@ adb install -r -g app/build/outputs/apk/debug/app-debug.apk
 | `DocTracker.kt` | EMA 平滑、评分（支撑/面积/稳定度/IMU/清晰度/规整度）、倒计时状态机 |
 | `ScanCapture.kt` | 全分辨率精修 → 透视变换到 A4(1240×1754) → 去阴影 + 锐化 → JPEG |
 | `OverlayView.kt` | 四边形、角点、评分条、倒计时环、状态文案 |
+| `RectifyView.kt` | 结果页：把检测到的斜四边形插值到正视矩形做透视动画，再叠化到扫描件 |
 | `MotionGate.kt` | 陀螺仪角速度（用于"手持是否稳定"判定） |
 | `ImageOps.kt` | YUV→Mat、金字塔背景、Laplacian 方差、Bitmap 互转 |
 
@@ -73,6 +77,25 @@ adb shell am start -n com.dsh.scanner/.MainActivity --ez virtual true
 adb shell am start -n com.dsh.scanner/.MainActivity --ez forcecapture true
 ```
 
+
+## 识别成功后的结果页
+
+识别成功（自动触发或手动「拍照」）后走 `MainActivity.stopRecognition()`：
+
+1. `imageAnalysis.clearAnalyzer()`：分析流立刻停掉，后续帧不再检测；
+2. 拍照 → 全分辨率直线精修 → 透视变换 → 去阴影（`ScanCapture.process`）；
+3. `provider.unbindAll()`：预览一起解绑，这次识别彻底结束；
+4. `RectifyView.play(原图, 精修四边形, 扫描件)` 播放动画，全屏显示结果。
+
+动画分两段（`RectifyView`）：
+
+- **0.08–0.70**：四个角点在屏幕坐标里从检测位置插值到目标 A4 矩形，每帧用
+  `Matrix.setPolyToPoly` 把原图映射到当前四边形、裁掉四边形以外的部分——
+  视觉上就是那张斜着的纸被慢慢扶正；背景原图同步压暗。
+- **0.70–1.00**：交叉叠化到去阴影后的扫描件。
+
+动画结束后底部出现「重新扫描」，点击才 `tracker.reset()` 并重新绑定相机，
+回到取景状态。
 
 ## 角点模型（低对比度兜底）
 

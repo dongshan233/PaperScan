@@ -5,4 +5,7 @@
     <string name="capture">拍照</string>
     <string name="torch">补光</string>
     <string name="result_preview">扫描结果预览</string>
+    <string name="rescan">重新扫描</string>
+    <string name="result_caption">识别成功 · %1$s</string>
+    <string name="status_done">识别完成</string>
 </resources>

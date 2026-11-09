@@ -24,17 +24,6 @@
         android:layout_width="match_parent"
         android:layout_height="match_parent" />
 
-    <ImageView
-        android:id="@+id/resultPreview"
-        android:layout_width="96dp"
-        android:layout_height="128dp"
-        android:layout_gravity="bottom|end"
-        android:layout_margin="12dp"
-        android:alpha="0"
-        android:background="#22FFFFFF"
-        android:scaleType="fitCenter"
-        android:contentDescription="@string/result_preview" />
-
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
@@ -67,5 +56,35 @@
             android:layout_marginStart="12dp"
             android:text="@string/capture" />
     </LinearLayout>
+
+    <!-- 识别成功后的全屏结果页：先做"斜纸扶正"动画，再显示扫描件 -->
+    <com.dsh.scanner.RectifyView
+        android:id="@+id/rectifyView"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:contentDescription="@string/result_preview"
+        android:visibility="gone" />
+
+    <TextView
+        android:id="@+id/resultCaption"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="top|center_horizontal"
+        android:layout_marginTop="16dp"
+        android:background="#66000000"
+        android:paddingHorizontal="12dp"
+        android:paddingVertical="6dp"
+        android:textColor="#FFFFFF"
+        android:textSize="14sp"
+        android:visibility="gone" />
+
+    <Button
+        android:id="@+id/rescanButton"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="bottom|center_horizontal"
+        android:layout_marginBottom="24dp"
+        android:text="@string/rescan"
+        android:visibility="gone" />
 
 </FrameLayout>
