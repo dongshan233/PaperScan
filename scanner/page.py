@@ -73,7 +73,7 @@ def _wrap(draw, text: str, fnt, max_w: float) -> list[str]:
     return lines
 
 
-def render_page() -> np.ndarray:
+def render_page(density: float = 1.0) -> np.ndarray:
     """Return the worksheet as BGR uint8."""
     img = Image.new("RGB", (PAGE_W, PAGE_H), (236, 234, 229))
     d = ImageDraw.Draw(img)
@@ -92,7 +92,8 @@ def render_page() -> np.ndarray:
     y += 56
 
     body = font("regular", 27)
-    for para in PASSAGE:
+    keep = max(1, int(round(len(PASSAGE) * max(density, 0.08)))) if density > 0 else 0
+    for para in PASSAGE[:keep]:
         for line in _wrap(d, para, body, W):
             d.text((MARGIN, y), line, font=body, fill=(30, 30, 30))
             y += 46
@@ -100,6 +101,9 @@ def render_page() -> np.ndarray:
 
     # table (答题区) -- straight lines that compete with the page border
     y += 10
+    if density < 0.35:
+        d.text((PAGE_W // 2 - 40, PAGE_H - 60), "— 1 —", font=font("regular", 22), fill=(90, 90, 90))
+        return cv2.cvtColor(np.asarray(img), cv2.COLOR_RGB2BGR)
     cols = [150, 700, 140]
     rows = [56, 74, 74, 74]
     x0, y0 = MARGIN, y
@@ -125,7 +129,8 @@ def render_page() -> np.ndarray:
     d.text((MARGIN, y), "二、回答问题。", font=font("bold", 30), fill=(20, 20, 20))
     y += 56
     qf = font("regular", 26)
-    for num, q in QUESTIONS:
+    nq = max(0, int(round(len(QUESTIONS) * density)))
+    for num, q in QUESTIONS[:nq]:
         lines = _wrap(d, q, qf, W - 60)
         for i, line in enumerate(lines):
             d.text((MARGIN + (0 if i == 0 else 46), y), (num + " " if i == 0 else "") + line,

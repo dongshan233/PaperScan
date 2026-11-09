@@ -169,6 +169,10 @@ class MainActivity : AppCompatActivity() {
     /** Debug hook: feeds the bundled image through the live loop to test auto-capture. */
     private fun startVirtualMode() {
         try {
+            if (modelDetector == null) {
+                modelDetector = DocModelDetector(applicationContext)
+                Log.i(TAG, "model loaded for virtual mode")
+            }
             val bytes = assets.open("selftest.jpg").readBytes()
             val bmp = android.graphics.BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
             debugImage.setImageBitmap(bmp)
@@ -190,7 +194,19 @@ class MainActivity : AppCompatActivity() {
                     val dt = (now - last).coerceIn(1L, 200L)
                     last = now
                     val tDet = SystemClock.elapsedRealtime()
-                    val det = try { detector.detect(gray) } catch (t: Throwable) { null }
+                    var det = try { detector.detect(gray) } catch (t: Throwable) { null }
+                    if (det == null) {
+                        val m = modelDetector
+                        if (m != null) {
+                            val r = try { m.detect(bgr) } catch (t: Throwable) { null }
+                            if (r != null) {
+                                det = DocDetector.Detection(
+                                    r.quad, r.confidence.toDouble(),
+                                    (quadArea(r.quad) / (gray.cols() * gray.rows()).toFloat()).toDouble()
+                                )
+                            }
+                        }
+                    }
                     val detMs = (SystemClock.elapsedRealtime() - tDet).toFloat()
                     val rect = det?.quad?.bbox()?.toCvRect()
                     val sharp = ImageOps.laplacianVariance(gray, rect)

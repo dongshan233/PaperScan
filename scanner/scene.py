@@ -64,8 +64,9 @@ def _desk(w: int, h: int, seed: int = 7, kind: str = "wood") -> np.ndarray:
 
 
 class Scene:
-    def __init__(self, total_frames: int = 110, desk: str = "wood", shadow: float = 0.38):
-        self.page = page.render_page()
+    def __init__(self, total_frames: int = 110, desk: str = "wood", shadow: float = 0.38,
+                 text_density: float = 1.0):
+        self.page = page.render_page(text_density)
         self.bg = _desk(FW, FH, kind=desk)
         self.desk = desk
         self.shadow = shadow
