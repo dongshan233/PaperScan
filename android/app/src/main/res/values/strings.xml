@@ -4,6 +4,7 @@
     <string name="status_idle">把试卷放入取景框</string>
     <string name="capture">拍照</string>
     <string name="torch">补光</string>
+    <string name="filter_enhance">增强</string>
     <string name="result_preview">扫描结果预览</string>
     <string name="rescan">重新扫描</string>
     <string name="result_caption">识别成功 · %1$s</string>

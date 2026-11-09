@@ -42,6 +42,8 @@ class MainActivity : AppCompatActivity() {
     private lateinit var debugImage: ImageView
     private lateinit var shutter: Button
     private lateinit var torch: Button
+    private lateinit var filterButton: Button
+    private var filter = ScanCapture.Filter.ENHANCE
 
     /** 结果页：斜纸扶正动画 + 全屏扫描件。 */
     private lateinit var rectifyView: RectifyView
@@ -104,6 +106,7 @@ class MainActivity : AppCompatActivity() {
         debugImage = findViewById(R.id.debugImage)
         shutter = findViewById(R.id.shutterButton)
         torch = findViewById(R.id.torchButton)
+        filterButton = findViewById(R.id.filterButton)
         rectifyView = findViewById(R.id.rectifyView)
         rescanButton = findViewById(R.id.rescanButton)
         resultCaption = findViewById(R.id.resultCaption)
@@ -118,6 +121,14 @@ class MainActivity : AppCompatActivity() {
 
         shutter.setOnClickListener {
             if (!capturing && !frozen) capture()
+        }
+        filterButton.setOnClickListener {
+            filter = when (filter) {
+                ScanCapture.Filter.COLOR -> ScanCapture.Filter.ENHANCE
+                ScanCapture.Filter.ENHANCE -> ScanCapture.Filter.GRAY
+                ScanCapture.Filter.GRAY -> ScanCapture.Filter.COLOR
+            }
+            filterButton.text = filter.label
         }
         torch.setOnClickListener {
             torchOn = !torchOn
@@ -198,7 +209,7 @@ class MainActivity : AppCompatActivity() {
                         frozen = true
                         main.post { overlay.clear() }
                         try {
-                            val res = ScanCapture.process(bgr, snap.quad!!, outDir, detector)
+                            val res = ScanCapture.process(bgr, snap.quad!!, outDir, detector, filter)
                             main.post {
                                 showResult(bmp, res.quad, res, keepSource = true)
                             }
@@ -251,7 +262,7 @@ class MainActivity : AppCompatActivity() {
             }
 
             val outDir = File(getExternalFilesDir(null) ?: filesDir, "scans")
-            val result = ScanCapture.process(mat, det.quad, outDir, detector)
+            val result = ScanCapture.process(mat, det.quad, outDir, detector, filter)
             mat.release()
 
             showResult(bmp, result.quad, result, keepSource = false)
@@ -401,7 +412,7 @@ class MainActivity : AppCompatActivity() {
                     val quadFull = quad.scaled(sx, sy)
 
                     val outDir = File(getExternalFilesDir(null) ?: filesDir, "scans")
-                    val result = ScanCapture.process(mat, quadFull, outDir, detector)
+                    val result = ScanCapture.process(mat, quadFull, outDir, detector, filter)
                     mat.release()
 
                     main.post {

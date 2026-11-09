@@ -20,9 +20,21 @@ object ScanCapture {
     const val A4_LONG = 1754
     const val A4_SHORT = 1240
 
+    enum class Filter(val label: String) {
+        COLOR("原彩"),
+        ENHANCE("增强"),
+        GRAY("黑白"),
+    }
+
     data class Result(val bitmap: Bitmap, val file: File, val quad: Quad)
 
-    fun process(src: Mat, coarse: Quad, outDir: File, detector: DocDetector): Result {
+    fun process(
+        src: Mat,
+        coarse: Quad,
+        outDir: File,
+        detector: DocDetector,
+        filter: Filter = Filter.ENHANCE,
+    ): Result {
         val gray = Mat()
         Imgproc.cvtColor(src, gray, Imgproc.COLOR_BGR2GRAY)
         val refined = detector.refine(gray, coarse, band = maxOf(8, (coarse.bbox().width() * 0.01f).toInt()))
@@ -55,7 +67,11 @@ object ScanCapture {
         dstPts.release()
         m.release()
 
-        val enhanced = enhance(warped)
+        val enhanced = when (filter) {
+            Filter.COLOR -> warped.clone()
+            Filter.ENHANCE -> enhanceColor(warped)
+            Filter.GRAY -> enhanceGray(warped)
+        }
         warped.release()
 
         outDir.mkdirs()
@@ -66,8 +82,38 @@ object ScanCapture {
         return Result(bmp, file, refined)
     }
 
+    /** Colour kept: only the L channel is flattened, so cast/ink colours survive. */
+    private fun enhanceColor(bgr: Mat): Mat {
+        val lab = Mat()
+        Imgproc.cvtColor(bgr, lab, Imgproc.COLOR_BGR2Lab)
+        val ch = ArrayList<Mat>(3)
+        Core.split(lab, ch)
+        lab.release()
+
+        val bg = ImageOps.background(ch[0], ds = 8, k = 21)
+        val ln = Mat()
+        Core.divide(ch[0], bg, ln, 232.0)
+        bg.release()
+        ch[0].release()
+        ch[0] = ln
+
+        val merged = Mat()
+        Core.merge(ch, merged)
+        ch.forEach { it.release() }
+
+        val out = Mat()
+        Imgproc.cvtColor(merged, out, Imgproc.COLOR_Lab2BGR)
+        merged.release()
+
+        val blur = Mat()
+        Imgproc.GaussianBlur(out, blur, Size(0.0, 0.0), 1.6)
+        Core.addWeighted(out, 1.3, blur, -0.3, 0.0, out)
+        blur.release()
+        return out
+    }
+
     /** Grayscale scan look: divide by a large-radius background, then unsharp. */
-    private fun enhance(bgr: Mat): Mat {
+    private fun enhanceGray(bgr: Mat): Mat {
         val gray = Mat()
         Imgproc.cvtColor(bgr, gray, Imgproc.COLOR_BGR2GRAY)
         val bg = ImageOps.background(gray, ds = 8, k = 21)
