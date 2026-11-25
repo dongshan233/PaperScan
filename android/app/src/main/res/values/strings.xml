@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">试卷扫描</string>
-    <string name="status_idle">把试卷放入取景框</string>
+    <string name="status_idle">请将阅读材料拍完整</string>
     <string name="status_search">把试卷放入取景框 · %1$s</string>
     <string name="status_tracking">识别中，请放稳</string>
     <string name="status_locked">已锁定，即将自动拍摄</string>
@@ -45,6 +45,14 @@
     <string name="hud_frame_ms">%1$d ms/帧</string>
     <string name="hud_capture">拍</string>
 
+    <!-- 拍摄条件不达标提示（按优先级展示第一个） -->
+    <string name="hint_area_small">纸张太小，请靠近一些</string>
+    <string name="hint_support_low">纸张边缘不清晰，请避开遮挡</string>
+    <string name="hint_unstable">画面在移动，请放稳</string>
+    <string name="hint_motion">手在移动，请保持不动</string>
+    <string name="hint_blurry">画面模糊，请对焦或补光</string>
+    <string name="hint_oblique">纸张角度过斜，请正对纸面</string>
+
     <string name="filter_color">原彩</string>
     <string name="filter_enhance">增强</string>
     <string name="filter_gray">黑白</string>
@@ -55,4 +63,17 @@
     <string name="result_preview">扫描结果预览</string>
     <string name="rescan">重新扫描</string>
     <string name="result_caption">识别成功 · %1$s</string>
+
+    <!-- 拍摄页（参考图样式） -->
+    <string name="back_home">返回首页</string>
+    <string name="captured_label">已拍摄</string>
+    <string name="captured_unit">张</string>
+    <string name="add_page">再拍一页</string>
+    <string name="segment_hint">支持分段拍摄，最多支持2张</string>
+    <string name="icon_placeholder">图标占位，待替换</string>
+    <string name="capture_limit_reached">最多支持拍摄2张</string>
+    <string name="review_hint">已拍 %1$d/%2$d 张，点击「再拍一页」继续</string>
+    <string name="delete_scan">删除这张扫描件</string>
+    <string name="start_analysis">开始解析</string>
+    <string name="review_complete">已拍摄 %1$d/%2$d 张，点击「开始解析」</string>
 </resources>

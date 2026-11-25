@@ -5,7 +5,13 @@ import android.content.pm.PackageManager
 import android.graphics.Bitmap
 import android.os.Bundle
 import android.util.Log
+import android.view.Gravity
 import android.view.View
+import android.widget.FrameLayout
+import android.widget.ImageView
+import android.widget.LinearLayout
+import android.widget.TextView
+import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
@@ -14,6 +20,7 @@ import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
 import com.dsh.scanner.R
+import com.dsh.scanner.core.DocTracker
 import com.dsh.scanner.core.ScanEvent
 import com.dsh.scanner.core.ScannerCore
 import com.dsh.scanner.databinding.ActivityMainBinding
@@ -26,6 +33,9 @@ import kotlinx.coroutines.launch
 /**
  * MVVM View: inflates the layout, owns CameraX and renders [ScanUiState].
  * Every recognition/capture decision is delegated to [MainViewModel].
+ *
+ * 拍摄页（参考图样式）：识别成功的结果以缩略图形式加到底部区域，
+ * 最多 [MainViewModel.maxCaptures] 张，达到上限后限制继续添加。
  */
 class MainActivity : AppCompatActivity() {
 
@@ -37,9 +47,6 @@ class MainActivity : AppCompatActivity() {
 
     /** CameraX 绑定/拍照适配器。 */
     private lateinit var cameraController: CameraController
-
-    /** 上一次渲染的结果文件名，用于检测「结果页 -> 取景页」并停止动画。 */
-    private var lastResultName: String? = null
 
     /** CameraX 回调无条件转发给 ViewModel。 */
     private val cameraListener = object : CameraController.Listener {
@@ -81,11 +88,28 @@ class MainActivity : AppCompatActivity() {
             listener = cameraListener,
         )
 
-        binding.shutterButton.setOnClickListener { viewModel.onShutterClick() }
-        binding.filterButton.setOnClickListener { viewModel.onFilterClick() }
-        binding.torchButton.setOnClickListener { viewModel.onTorchClick() }
-        binding.rescanButton.setOnClickListener { viewModel.onRescan() }
-        binding.rectifyView.onFinished = { viewModel.onRectifyFinished() }
+        binding.shutterButton.setOnClickListener {
+            if (viewModel.isLimitReached()) {
+                // 拍满两张后按钮变为「开始解析」；解析流程待业务接入
+                Toast.makeText(this, R.string.start_analysis, Toast.LENGTH_SHORT).show()
+            } else {
+                viewModel.onShutterClick()
+            }
+        }
+        binding.addTile.setOnClickListener { viewModel.onAddPageClick() }
+        binding.backHomeButton.setOnClickListener { finish() }
+
+        // 扶正动画背景与页面外围配色一致；动画结束后定格为静态截取图
+        binding.rectifyView.bgColor = ContextCompat.getColor(this, R.color.scan_outer_bg)
+        binding.rectifyView.onFinished = { showReviewImage() }
+
+        // 占位图标按钮：具体能力待接入（图标后续由设计稿替换）
+        binding.flipCameraButton.setOnClickListener {
+            Toast.makeText(this, R.string.icon_placeholder, Toast.LENGTH_SHORT).show()
+        }
+        binding.galleryButton.setOnClickListener {
+            Toast.makeText(this, R.string.icon_placeholder, Toast.LENGTH_SHORT).show()
+        }
 
         observeState()
 
@@ -113,51 +137,149 @@ class MainActivity : AppCompatActivity() {
             repeatOnLifecycle(Lifecycle.State.STARTED) {
                 launch { viewModel.uiState.collect(::render) }
                 launch { viewModel.events.collect(::handleEvent) }
+                launch { viewModel.capturedScans.collect(::renderCaptured) }
+                launch { viewModel.reviewScan.collect(::renderReview) }
             }
         }
     }
 
+    /** 正在播放/已播放的查看数据，避免重复触发动画。 */
+    private var playingReview: MainViewModel.ReviewData? = null
+
+    /**
+     * 「查看结果」状态渲染：进入时在预览区播放
+     * "识别方框 → 扶正（缩放/旋转）→ 截取图"的过渡动画；
+     * null 时停止动画、恢复相机预览显示。
+     */
+    private fun renderReview(review: MainViewModel.ReviewData?) {
+        if (review === playingReview) return
+        playingReview = review
+        if (review == null) {
+            binding.rectifyView.stop()
+            binding.rectifyView.visibility = View.GONE
+            binding.resultImage.visibility = View.GONE
+            return
+        }
+        binding.overlay.clear()
+        binding.resultImage.visibility = View.GONE
+        binding.rectifyView.play(review.source, review.quad, review.scan)
+    }
+
+    /** 动画结束回调：收起动画层，定格为静态截取图。 */
+    private fun showReviewImage() {
+        val review = viewModel.reviewScan.value ?: return
+        binding.rectifyView.visibility = View.GONE
+        binding.resultImage.setImageBitmap(review.scan)
+        binding.resultImage.visibility = View.VISIBLE
+    }
+
     private fun render(state: ScanUiState) {
-        binding.statusText.text = state.status.resolve(this)
-        binding.filterButton.text = getString(state.filter.labelRes())
-        binding.torchButton.text = getString(if (state.torchOn) R.string.torch_on else R.string.torch)
+        val overlay = state.overlay
+        val reason = overlay?.snapshot?.hints?.firstOrNull()
+        binding.statusText.text = when {
+            reason != null -> getString(reason.labelRes())
+            viewModel.reviewScan.value != null -> {
+                if (viewModel.isLimitReached()) {
+                    getString(R.string.review_complete, viewModel.capturedScans.value.size, viewModel.maxCaptures)
+                } else {
+                    state.status.resolve(this)
+                }
+            }
+            overlay?.snapshot?.state == DocTracker.State.SEARCH -> getString(R.string.status_idle)
+            else -> state.status.resolve(this)
+        }
 
         binding.previewView.visibility = if (state.previewVisible) View.VISIBLE else View.INVISIBLE
         if (state.previewVisible) binding.debugImage.visibility = View.GONE
 
-        val overlay = state.overlay
         if (overlay != null) {
             binding.overlay.update(overlay.snapshot, overlay.imageWidth, overlay.imageHeight, overlay.frameMs)
         } else {
             binding.overlay.clear()
         }
 
-        val resultName = state.resultFileName
-        if (resultName != null) {
-            binding.resultCaption.text = getString(R.string.result_caption, resultName)
-            binding.resultCaption.visibility = View.VISIBLE
-        } else {
-            binding.resultCaption.visibility = View.GONE
-        }
-
-        if (state.rescanVisible) {
-            if (binding.rescanButton.visibility != View.VISIBLE) {
-                binding.rescanButton.visibility = View.VISIBLE
-                binding.rescanButton.alpha = 0f
-                binding.rescanButton.animate().alpha(1f).setDuration(220L).start()
-            }
-        } else {
-            binding.rescanButton.animate().cancel()
-            binding.rescanButton.visibility = View.GONE
-        }
-
-        if (resultName == null && lastResultName != null) {
-            binding.rectifyView.stop()
-            binding.rectifyView.visibility = View.GONE
-        }
-        lastResultName = resultName
+        // 快门：拍摄中、查看截取图时置灰；拍满两张后变为「开始解析」（不再置灰）
+        val limitReached = viewModel.isLimitReached()
+        binding.shutterIcon.visibility = if (limitReached) View.GONE else View.VISIBLE
+        binding.shutterLabel.visibility = if (limitReached) View.VISIBLE else View.GONE
+        val shutterEnabled = !state.capturing && viewModel.reviewScan.value == null
+        binding.shutterButton.isEnabled = shutterEnabled
+        binding.shutterButton.alpha = if (shutterEnabled) 1f else 0.45f
 
         syncCamera(state)
+    }
+
+    /** 拍摄条件不达标原因 → 状态胶囊文案。 */
+    private fun DocTracker.CaptureHint.labelRes(): Int = when (this) {
+        DocTracker.CaptureHint.AREA_TOO_SMALL -> R.string.hint_area_small
+        DocTracker.CaptureHint.LOW_SUPPORT -> R.string.hint_support_low
+        DocTracker.CaptureHint.UNSTABLE -> R.string.hint_unstable
+        DocTracker.CaptureHint.MOTION -> R.string.hint_motion
+        DocTracker.CaptureHint.BLURRY -> R.string.hint_blurry
+        DocTracker.CaptureHint.OBLIQUE -> R.string.hint_oblique
+    }
+
+    private fun renderCaptured(scans: List<MainViewModel.CapturedScan>) {
+        binding.countBadge.text = scans.size.toString()
+
+        binding.thumbList.removeAllViews()
+        val selectedBorder = ContextCompat.getDrawable(this, R.drawable.bg_thumb_selected)
+        val badgeBg = ContextCompat.getDrawable(this, R.drawable.bg_badge)
+        val deleteBadgeBg = ContextCompat.getDrawable(this, R.drawable.bg_delete_badge)
+        scans.forEachIndexed { index, scan ->
+            // 缩略图容器：黄框图 + 左上角序号 + 右上角删除
+            val item = FrameLayout(this)
+            item.layoutParams = LinearLayout.LayoutParams(dp(120), dp(68)).apply {
+                marginEnd = dp(16)
+            }
+
+            val thumb = ImageView(this)
+            thumb.layoutParams = FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.MATCH_PARENT,
+                FrameLayout.LayoutParams.MATCH_PARENT,
+            )
+            thumb.setImageBitmap(scan.thumbnail)
+            thumb.scaleType = ImageView.ScaleType.CENTER_CROP
+            thumb.clipToOutline = true
+            thumb.background = selectedBorder
+            item.addView(thumb)
+
+            // 设计图的黄色序号角标（左上）
+            val number = TextView(this).apply {
+                layoutParams = FrameLayout.LayoutParams(dp(18), dp(18)).apply {
+                    gravity = Gravity.TOP or Gravity.START
+                    marginStart = dp(2)
+                    topMargin = dp(2)
+                }
+                background = badgeBg
+                gravity = Gravity.CENTER
+                text = (index + 1).toString()
+                textSize = 11f
+                setTextColor(ContextCompat.getColor(context, R.color.scan_text_dark))
+            }
+            item.addView(number)
+
+            val delete = FrameLayout(this)
+            delete.layoutParams = FrameLayout.LayoutParams(dp(18), dp(18)).apply {
+                gravity = Gravity.TOP or Gravity.END
+                marginEnd = dp(2)
+                topMargin = dp(2)
+            }
+            delete.background = deleteBadgeBg
+            delete.contentDescription = getString(R.string.delete_scan)
+            val closeIcon = ImageView(this)
+            closeIcon.layoutParams = FrameLayout.LayoutParams(dp(10), dp(10), Gravity.CENTER)
+            closeIcon.setImageResource(R.drawable.ic_ph_close)
+            delete.addView(closeIcon)
+            delete.setOnClickListener { viewModel.onDeleteScan(index) }
+            item.addView(delete)
+
+            binding.thumbList.addView(item)
+        }
+
+        // 未达上限显示「再拍一页」，达到上限后隐藏并锁定快门
+        binding.addTile.visibility =
+            if (scans.size < viewModel.maxCaptures) View.VISIBLE else View.GONE
     }
 
     private fun syncCamera(state: ScanUiState) {
@@ -174,12 +296,8 @@ class MainActivity : AppCompatActivity() {
         when (event) {
             ScanEvent.CapturePhoto -> cameraController.takePhoto()
 
-            is ScanEvent.ShowResult -> {
-                binding.rectifyView.play(event.source, event.quad, event.scan)
-                binding.resultCaption.text = getString(R.string.result_caption, event.fileName)
-                binding.resultCaption.visibility = View.VISIBLE
-                binding.rescanButton.visibility = View.GONE
-            }
+            // 拍摄结果进底部缩略图区；不再播放全屏扶正动画
+            is ScanEvent.ShowResult -> viewModel.onScanResult(event)
 
             is ScanEvent.ShowDebugImage -> {
                 binding.debugImage.setImageBitmap(event.bitmap)
@@ -187,6 +305,8 @@ class MainActivity : AppCompatActivity() {
             }
         }
     }
+
+    private fun dp(value: Int): Int = (value * resources.displayMetrics.density).toInt()
 
     override fun onResume() {
         super.onResume()

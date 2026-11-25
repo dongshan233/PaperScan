@@ -1,96 +1,289 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!--
+  拍摄页：按设计图还原
+  外围 #FBF8F0 / 内层卡片 #FFF9D8 / 边框 #FCDF81
+-->
 <FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="#000000">
+    android:background="@color/scan_outer_bg">
 
-    <androidx.camera.view.PreviewView
-        android:id="@+id/previewView"
+    <!-- 内层卡片 -->
+    <com.google.android.material.card.MaterialCardView
+        android:id="@+id/scanCard"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
-        app:scaleType="fitCenter" />
+        android:layout_marginStart="24dp"
+        android:layout_marginTop="52dp"
+        android:layout_marginEnd="124dp"
+        android:layout_marginBottom="24dp"
+        app:cardBackgroundColor="@color/scan_inner_bg"
+        app:cardCornerRadius="16dp"
+        app:cardElevation="0dp"
+        app:strokeColor="@color/scan_border"
+        app:strokeWidth="1dp">
 
-    <ImageView
-        android:id="@+id/debugImage"
-        android:layout_width="match_parent"
-        android:layout_height="match_parent"
-        android:scaleType="fitCenter"
-        android:visibility="gone"
-        android:contentDescription="@string/result_preview" />
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:orientation="vertical"
+            android:padding="16dp">
 
-    <com.dsh.scanner.ui.OverlayView
-        android:id="@+id/overlay"
-        android:layout_width="match_parent"
-        android:layout_height="match_parent" />
+            <!-- 预览区：铺满裁切，圆角 -->
+            <FrameLayout
+                android:id="@+id/previewContainer"
+                android:layout_width="match_parent"
+                android:layout_height="0dp"
+                android:layout_weight="1"
+                android:background="@drawable/bg_preview_round"
+                android:clipToOutline="true">
 
+                <androidx.camera.view.PreviewView
+                    android:id="@+id/previewView"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    app:scaleType="fillCenter" />
+
+                <!-- 拍摄完成后静态展示的截取图 -->
+                <ImageView
+                    android:id="@+id/resultImage"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:scaleType="fitCenter"
+                    android:background="@color/scan_outer_bg"
+                    android:visibility="gone"
+                    android:contentDescription="@string/result_preview" />
+
+                <!-- 识别方框 → 扶正 → 截取图的过渡动画 -->
+                <com.dsh.scanner.ui.RectifyView
+                    android:id="@+id/rectifyView"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:visibility="gone" />
+
+                <ImageView
+                    android:id="@+id/debugImage"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:scaleType="fitCenter"
+                    android:visibility="gone"
+                    android:contentDescription="@string/result_preview" />
+
+                <com.dsh.scanner.ui.OverlayView
+                    android:id="@+id/overlay"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent" />
+
+                <!-- 状态提示胶囊（预览底部居中） -->
+                <TextView
+                    android:id="@+id/statusText"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_gravity="bottom|center_horizontal"
+                    android:layout_marginBottom="24dp"
+                    android:background="@drawable/bg_status_pill"
+                    android:paddingHorizontal="20dp"
+                    android:paddingVertical="9dp"
+                    android:maxLines="1"
+                    android:ellipsize="end"
+                    android:text="@string/status_idle"
+                    android:textColor="#FFFFFF"
+                    android:textSize="15sp" />
+            </FrameLayout>
+
+            <!-- 底部已拍区域 -->
+            <LinearLayout
+                android:id="@+id/bottomStrip"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="12dp"
+                android:gravity="center_vertical"
+                android:orientation="horizontal">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="@string/captured_label"
+                    android:textColor="@color/scan_text_dark"
+                    android:textSize="17sp" />
+
+                <TextView
+                    android:id="@+id/countBadge"
+                    android:layout_width="26dp"
+                    android:layout_height="26dp"
+                    android:layout_marginStart="8dp"
+                    android:background="@drawable/bg_badge"
+                    android:gravity="center"
+                    android:text="0"
+                    android:textColor="@color/scan_text_dark"
+                    android:textSize="14sp"
+                    android:textStyle="bold" />
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="8dp"
+                    android:text="@string/captured_unit"
+                    android:textColor="@color/scan_text_dark"
+                    android:textSize="17sp" />
+
+                <LinearLayout
+                    android:id="@+id/thumbList"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="20dp"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal" />
+
+                <!-- 「再拍一页」虚线占位框；达到 2 张上限后隐藏 -->
+                <FrameLayout
+                    android:id="@+id/addTile"
+                    android:layout_width="120dp"
+                    android:layout_height="68dp"
+                    android:layout_marginStart="16dp"
+                    android:background="@drawable/bg_add_tile">
+
+                    <LinearLayout
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_gravity="center"
+                        android:gravity="center"
+                        android:orientation="vertical">
+
+                        <ImageView
+                            android:layout_width="18dp"
+                            android:layout_height="18dp"
+                            android:src="@drawable/ic_ph_add"
+                            android:contentDescription="@string/add_page" />
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="3dp"
+                            android:text="@string/add_page"
+                            android:textColor="@color/scan_text_secondary"
+                            android:textSize="12sp" />
+                    </LinearLayout>
+                </FrameLayout>
+
+                <Space
+                    android:layout_width="0dp"
+                    android:layout_height="1dp"
+                    android:layout_weight="1" />
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="@string/segment_hint"
+                    android:textColor="@color/scan_text_dark"
+                    android:textSize="15sp" />
+            </LinearLayout>
+        </LinearLayout>
+    </com.google.android.material.card.MaterialCardView>
+
+    <!-- 返回首页 -->
     <LinearLayout
-        android:layout_width="match_parent"
+        android:id="@+id/backHomeButton"
+        android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:layout_gravity="bottom"
-        android:background="#88000000"
+        android:layout_marginStart="16dp"
+        android:layout_marginTop="12dp"
+        android:background="?attr/selectableItemBackgroundBorderless"
         android:gravity="center_vertical"
         android:orientation="horizontal"
-        android:paddingHorizontal="16dp"
-        android:paddingVertical="8dp">
+        android:padding="6dp">
+
+        <ImageView
+            android:layout_width="16dp"
+            android:layout_height="16dp"
+            android:src="@drawable/ic_ph_back"
+            android:contentDescription="@string/back_home" />
 
         <TextView
-            android:id="@+id/statusText"
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:text="@string/status_idle"
-            android:textColor="#FFFFFF"
-            android:textSize="15sp" />
-
-        <Button
-            android:id="@+id/filterButton"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="@string/filter_gray" />
-
-        <Button
-            android:id="@+id/torchButton"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="@string/torch" />
-
-        <Button
-            android:id="@+id/shutterButton"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginStart="12dp"
-            android:text="@string/capture" />
+            android:layout_marginStart="4dp"
+            android:text="@string/back_home"
+            android:textColor="@color/scan_text_dark"
+            android:textSize="14sp" />
     </LinearLayout>
 
-    <!-- 识别成功后的全屏结果页：先做"斜纸扶正"动画，再显示扫描件 -->
-    <com.dsh.scanner.ui.RectifyView
-        android:id="@+id/rectifyView"
-        android:layout_width="match_parent"
-        android:layout_height="match_parent"
-        android:contentDescription="@string/result_preview"
-        android:visibility="gone" />
-
-    <TextView
-        android:id="@+id/resultCaption"
+    <!-- 右侧操作列：切换相机（占位）/ 快门 / 相册（占位） -->
+    <LinearLayout
+        android:id="@+id/actionColumn"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:layout_gravity="top|center_horizontal"
-        android:layout_marginTop="16dp"
-        android:background="#66000000"
-        android:paddingHorizontal="12dp"
-        android:paddingVertical="6dp"
-        android:textColor="#FFFFFF"
-        android:textSize="14sp"
-        android:visibility="gone" />
+        android:layout_gravity="end|center_vertical"
+        android:layout_marginEnd="18dp"
+        android:gravity="center_horizontal"
+        android:orientation="vertical">
 
-    <Button
-        android:id="@+id/rescanButton"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_gravity="bottom|center_horizontal"
-        android:layout_marginBottom="24dp"
-        android:text="@string/rescan"
-        android:visibility="gone" />
+        <FrameLayout
+            android:id="@+id/flipCameraButton"
+            android:layout_width="44dp"
+            android:layout_height="44dp"
+            android:background="?attr/selectableItemBackgroundBorderless">
+
+            <ImageView
+                android:layout_width="30dp"
+                android:layout_height="30dp"
+                android:layout_gravity="center"
+                android:src="@drawable/ic_ph_camera"
+                android:contentDescription="@string/icon_placeholder" />
+        </FrameLayout>
+
+        <!-- 快门：黄色圆 + 淡黄光环；拍满 2 张后显示「开始解析」 -->
+        <FrameLayout
+            android:layout_width="96dp"
+            android:layout_height="96dp"
+            android:layout_marginTop="40dp"
+            android:layout_marginBottom="40dp"
+            android:background="@drawable/bg_shutter_halo">
+
+            <FrameLayout
+                android:id="@+id/shutterButton"
+                android:layout_width="80dp"
+                android:layout_height="80dp"
+                android:layout_gravity="center"
+                android:background="@drawable/bg_shutter"
+                android:elevation="4dp">
+
+                <ImageView
+                    android:id="@+id/shutterIcon"
+                    android:layout_width="34dp"
+                    android:layout_height="34dp"
+                    android:layout_gravity="center"
+                    android:src="@drawable/ic_ph_camera"
+                    android:contentDescription="@string/capture" />
+
+                <TextView
+                    android:id="@+id/shutterLabel"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_gravity="center"
+                    android:gravity="center"
+                    android:text="@string/start_analysis"
+                    android:textColor="@color/scan_text_dark"
+                    android:textSize="15sp"
+                    android:textStyle="bold"
+                    android:visibility="gone" />
+            </FrameLayout>
+        </FrameLayout>
+
+        <FrameLayout
+            android:id="@+id/galleryButton"
+            android:layout_width="44dp"
+            android:layout_height="44dp"
+            android:background="?attr/selectableItemBackgroundBorderless">
+
+            <ImageView
+                android:layout_width="30dp"
+                android:layout_height="30dp"
+                android:layout_gravity="center"
+                android:src="@drawable/ic_ph_gallery"
+                android:contentDescription="@string/icon_placeholder" />
+        </FrameLayout>
+    </LinearLayout>
 
 </FrameLayout>

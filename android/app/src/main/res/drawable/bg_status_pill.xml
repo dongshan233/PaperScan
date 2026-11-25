@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 状态提示胶囊（预览底部居中悬浮） -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android">
+    <solid android:color="#D92B2B2B" />
+    <corners android:radius="18dp" />
+</shape>

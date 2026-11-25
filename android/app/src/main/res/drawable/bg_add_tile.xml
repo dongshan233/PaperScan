@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 「再拍一页」虚线占位框 -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android">
+    <solid android:color="#FFFEFA" />
+    <corners android:radius="10dp" />
+    <stroke
+        android:width="1.5dp"
+        android:color="@color/scan_border"
+        android:dashWidth="4dp"
+        android:dashGap="3dp" />
+</shape>

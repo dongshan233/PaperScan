@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 快门浅黄光环（设计图：黄色圆按钮外有一圈淡黄晕） -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="oval">
+    <solid android:color="#66FCDF81" />
+</shape>

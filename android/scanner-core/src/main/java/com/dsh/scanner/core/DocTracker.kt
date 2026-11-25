@@ -47,6 +47,31 @@ class DocTracker(
         COUNTDOWN,
     }
 
+    /**
+     * 拍摄触发条件中当前不达标的因素。
+     * 按对用户行动的优先级排序（声明序即优先级），宿主取第一个展示提示。
+     * 阈值与评分计算同源，评分不过线时必至少命中一项。
+     */
+    enum class CaptureHint {
+        /** 纸张面积占比太小：请把纸张放满取景框或靠近一些。 */
+        AREA_TOO_SMALL,
+
+        /** 纸张边缘支撑率低：边缘不清晰、被遮挡或对比度不足。 */
+        LOW_SUPPORT,
+
+        /** 四边形仍在移动：请放稳。 */
+        UNSTABLE,
+
+        /** 陀螺仪角速度偏高：手在移动。 */
+        MOTION,
+
+        /** Laplacian 清晰度不足：画面模糊或未对焦。 */
+        BLURRY,
+
+        /** 几何规整度低：拍摄角度过斜或四边形不规整。 */
+        OBLIQUE,
+    }
+
     data class Snapshot(
         /** 当前平滑后的纸张四边形（tl/tr/br/bl）；连续丢帧后为 null。 */
         val quad: Quad?,
@@ -74,6 +99,9 @@ class DocTracker(
 
         /** 当前陀螺仪角速度，单位 °/s。 */
         val omega: Float,
+
+        /** 当前不达标的拍摄条件；空集合表示全部达标（或无需提示）。 */
+        val hints: Set<CaptureHint> = emptySet(),
     )
 
     /** 当前平滑后的四边形，供快照和手动拍照读取。 */
@@ -171,6 +199,7 @@ class DocTracker(
         var raw = 0f
         var stability = 0f
         var support = 0f
+        var hints = emptySet<CaptureHint>()
 
         if (quad != null) {
             support = if (det != null) lastSupport else lastSupport * 0.8f
@@ -185,6 +214,18 @@ class DocTracker(
             if (det == null) raw *= 0.6f
             if (lastArea < 0.15f || support < 0.35f) raw *= 0.35f
             raw = raw.coerceIn(0f, 1f)
+
+            // 只在有效检测帧上计算不达标原因；按 CaptureHint 声明序插入，保持优先级
+            if (det != null) {
+                val failing = linkedSetOf<CaptureHint>()
+                if (lastArea < 0.20f) failing.add(CaptureHint.AREA_TOO_SMALL)
+                if (support < 0.45f) failing.add(CaptureHint.LOW_SUPPORT)
+                if (stability < 0.60f) failing.add(CaptureHint.UNSTABLE)
+                if (omegaDeg > imuGate * 0.5f) failing.add(CaptureHint.MOTION)
+                if (sharpness < 80f) failing.add(CaptureHint.BLURRY)
+                if (geom < 0.55f) failing.add(CaptureHint.OBLIQUE)
+                hints = failing
+            }
         }
 
         scoreEma = 0.45f * scoreEma + 0.55f * raw
@@ -227,6 +268,7 @@ class DocTracker(
             support = support,
             sharpness = sharpness,
             omega = omegaDeg,
+            hints = if (countdown > 0L) emptySet() else hints,
         )
     }
 

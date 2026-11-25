@@ -126,13 +126,13 @@ sealed interface ScanEvent {
 
     /** 播放斜纸扶正动画，结束后显示扫描件。 */
     data class ShowResult(
-        /** 动画用的原图，长边不超过约 1400 px。 */
+        /** 交由接收方的展示原图（长边不超过约 1400 px）；接收方用完应 recycle。 */
         val source: Bitmap,
 
         /** 纸张在 [source] 坐标系下的四边形（tl/tr/br/bl）。 */
         val quad: Quad,
 
-        /** 最终矫正后的扫描件。 */
+        /** 最终矫正后的扫描件；接收方用完应 recycle。 */
         val scan: Bitmap,
 
         /** 扫描件文件名，用于结果页标题。 */

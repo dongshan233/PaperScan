@@ -20,12 +20,14 @@ import kotlin.math.min
 
 /**
  * 识别成功后的结果展示：把原始照片里那块斜着的纸，按照检测到的四边形
- * 逐渐拉直成 A4 正视图，最后交叉淡入增强后的扫描件。
+ * 逐渐拉直成 A4 正视图（透视映射同时产生缩放与旋转），最后交叉淡入增强后的扫描件。
  *
  * 动画分两段：
  *  - 0.08 → 0.70：四个角点从检测位置线性插值到目标矩形，期间用
  *    [Matrix.setPolyToPoly] 做透视映射，只画四边形内部，看起来就是纸被"扶正"；
  *  - 0.70 → 1.00：直接叠化到 [ScanCapture] 输出的去阴影扫描件。
+ *
+ * 所有权契约：传入的位图始终归调用方持有（ViewModel 负责回收），本 View 不回收。
  */
 class RectifyView @JvmOverloads constructor(
     context: Context,
@@ -36,6 +38,9 @@ class RectifyView @JvmOverloads constructor(
     /** 动画结束回调（主线程）。 */
     var onFinished: (() -> Unit)? = null
 
+    /** 动画背景色；默认黑色，宿主可按页面风格覆盖。 */
+    var bgColor: Int = Color.BLACK
+
     private val pagePaint = Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG)
     private val photoPaint = Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG)
     private val resultPaint = Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG)
@@ -43,13 +48,13 @@ class RectifyView @JvmOverloads constructor(
         style = Paint.Style.STROKE
         strokeWidth = dp(2f)
         strokeJoin = Paint.Join.ROUND
-        color = Color.parseColor("#7CE38B")
+        color = Color.parseColor("#F6C344")
     }
 
-    /** 动画源图（含透视畸变），由本 View 负责回收。 */
+    /** 动画源图（含透视畸变）；所有权归调用方，本 View 只持有引用。 */
     private var source: Bitmap? = null
 
-    /** 最终扫描件，由本 View 负责回收。 */
+    /** 最终扫描件；所有权归调用方，本 View 只持有引用。 */
     private var result: Bitmap? = null
 
     /** 纸的四个角，源图像素坐标。 */
@@ -87,13 +92,13 @@ class RectifyView @JvmOverloads constructor(
     private var cancelled = false
 
     /**
-     * @param source 拍照得到的原图（含透视畸变）
+     * @param source 拍照得到的原图（含透视畸变）；调用方持有所有权
      * @param quad   纸在 [source] 像素坐标下的四边形，顺序 tl/tr/br/bl
-     * @param result 已经矫正、去阴影的扫描件
+     * @param result 已经矫正、去阴影的扫描件；调用方持有所有权
      */
     fun play(source: Bitmap, quad: Quad, result: Bitmap) {
         cancelAnimation()
-        releaseBitmaps()
+        clearRefs()
         this.source = source
         this.result = result
         for (i in 0 until 4) {
@@ -108,22 +113,18 @@ class RectifyView @JvmOverloads constructor(
         if (width > 0 && height > 0) startAnimation() else pendingStart = true
     }
 
-    /** 收起结果页，停止动画并释放位图。 */
+    /** 收起结果页，停止动画并释放位图引用（位图由调用方回收）。 */
     fun stop() {
         cancelAnimation()
-        releaseBitmaps()
+        clearRefs()
         pagePath.reset()
         progress = 0f
         invalidate()
     }
 
-    private fun releaseBitmaps() {
-        val s = source
-        val r = result
+    private fun clearRefs() {
         source = null
         result = null
-        if (s != null && !s.isRecycled) s.recycle()
-        if (r != null && r !== s && !r.isRecycled) r.recycle()
     }
 
     override fun onSizeChanged(w: Int, h: Int, oldw: Int, oldh: Int) {
@@ -166,7 +167,7 @@ class RectifyView @JvmOverloads constructor(
         val h = height.toFloat()
         if (w <= 0f || h <= 0f) return
 
-        canvas.drawColor(Color.BLACK)
+        canvas.drawColor(bgColor)
         layoutFor(w, h, src, res)
 
         val warp = ease.getInterpolation(((progress - 0.08f) / 0.62f).coerceIn(0f, 1f))

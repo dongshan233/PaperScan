@@ -427,13 +427,20 @@ class ScanCoordinator(
             )
         }
 
-        val (still, stillQuad) = try {
+        val (prepared, stillQuad) = try {
             prepareStill(source, result.quad)
         } catch (t: Throwable) {
             Log.e(TAG, "prepare still failed", t)
             source to result.quad
         }
-        if (!keepSource && still !== source && !source.isRecycled) source.recycle()
+        // ShowResult 的位图所有权归接收方：虚拟模式下 prepared 可能就是需要
+        // 保留继续使用的 virtualBitmap，此时改发一份拷贝，避免接收方回收后破坏循环。
+        val still = if (keepSource && prepared === source) {
+            prepared.copy(prepared.config ?: Bitmap.Config.ARGB_8888, false)
+        } else {
+            prepared
+        }
+        if (!keepSource && prepared !== source && !source.isRecycled) source.recycle()
         _events.trySend(ScanEvent.ShowResult(still, stillQuad, result.bitmap, result.file.name))
     }
 

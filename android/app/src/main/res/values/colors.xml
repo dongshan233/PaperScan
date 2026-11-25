@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- 拍摄页配色（参考图规范） -->
+    <color name="scan_outer_bg">#FBF8F0</color>
+    <color name="scan_inner_bg">#FFF9D8</color>
+    <color name="scan_border">#FCDF81</color>
+    <color name="scan_accent">#F6C344</color>
+    <color name="scan_text_dark">#1A1A1A</color>
+    <color name="scan_text_secondary">#6B6B6B</color>
+</resources>
