@@ -1,4 +1,4 @@
-package com.dsh.scanner.model
+package com.dsh.scanner.core
 
 import android.graphics.PointF
 import kotlin.math.hypot
@@ -6,23 +6,33 @@ import kotlin.math.hypot
 /**
  * Temporal tracking + stability scoring + capture state machine.
  * Port of the Tracker in scanner/pipeline.py.
+ *
+ * 参数来自 [TrackerConfig]；默认值是真机调参结果，请勿随手"清理"。
  */
 class DocTracker(
     /** 综合评分的过线阈值，达到后才开始累计稳定帧。 */
-    private val scoreOn: Float = 0.72f,
+    private val scoreOn: Float,
 
     /** 连续多少帧过线才进入倒计时。 */
-    private val stableFrames: Int = 5,
+    private val stableFrames: Int,
 
     /** 倒计时时长；期间掉线会立即中止。 */
-    private val countdownMs: Long = 700L,
+    private val countdownMs: Long,
 
     /** 拍完后的冷却时长，避免连续触发。 */
-    private val cooldownMs: Long = 1500L,
+    private val cooldownMs: Long,
 
     /** 陀螺仪角速度上限（°/s），超过则判定为手抖。 */
-    private val imuGate: Float = 25f,
+    private val imuGate: Float,
 ) {
+    constructor(config: TrackerConfig) : this(
+        config.scoreOn,
+        config.stableFrames,
+        config.countdownMs,
+        config.cooldownMs,
+        config.imuGate,
+    )
+
     enum class State {
         /** 当前帧没有可用纸张。 */
         SEARCH,

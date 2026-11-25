@@ -55,14 +55,12 @@ dependencies {
     implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.8.4")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.8.1")
 
+    // 识别功能抽离出的独立 module（内部自带 OpenCV/ONNX Runtime 及其初始化）
+    implementation(project(":scanner-core"))
+
     val camerax = "1.3.4"
     implementation("androidx.camera:camera-core:$camerax")
     implementation("androidx.camera:camera-camera2:$camerax")
     implementation("androidx.camera:camera-lifecycle:$camerax")
     implementation("androidx.camera:camera-view:$camerax")
-
-    implementation("org.opencv:opencv:4.9.0")
-
-    // DocAligner fastvit_t8 corner model (ONNX, Apache-2.0)
-    implementation("com.microsoft.onnxruntime:onnxruntime-android:1.20.0")
 }

@@ -1,4 +1,4 @@
-package com.dsh.scanner.model
+package com.dsh.scanner.core
 
 import android.graphics.Bitmap
 
@@ -60,7 +60,7 @@ sealed interface SelfTestResult {
 
     /** 自检过程抛异常。 */
     data class Failed(
-        /** 异常信息，直接展示在状态栏。 */
+        /** 异常信息。 */
         val message: String,
     ) : SelfTestResult
 }

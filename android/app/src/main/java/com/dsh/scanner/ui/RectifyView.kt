@@ -14,8 +14,8 @@ import android.graphics.RectF
 import android.util.AttributeSet
 import android.view.View
 import android.view.animation.DecelerateInterpolator
-import com.dsh.scanner.model.Quad
-import com.dsh.scanner.model.ScanCapture
+import com.dsh.scanner.core.Quad
+import com.dsh.scanner.core.ScanCapture
 import kotlin.math.min
 
 /**

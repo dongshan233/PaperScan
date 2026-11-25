@@ -1,36 +1,50 @@
-package com.dsh.scanner.model
+package com.dsh.scanner.core
 
 import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.os.SystemClock
 import android.util.Log
-import androidx.camera.core.ImageProxy
 import org.opencv.core.Mat
 import org.opencv.imgproc.Imgproc
 import java.io.File
 
 /**
- * Model layer for the scanner: one place that owns detection, temporal tracking,
- * the optional corner model and the full-resolution capture pipeline.
+ * 识别功能门面：帧分析、模型加载和全分辨率处理都从这里进出。
  *
- * CameraX frames arrive through [analyze]; the virtual-camera debug hook uses
- * [analyzeBitmap]. All public operations are serialized so the tracker/model
- * state is never touched from two threads at once.
+ * 宿主用法（MVVM 项目）：
+ * 1. 宿主 Application 的 `onCreate` 中调用 `ScannerCore.init()` 初始化 OpenCV
+ *    （漏调时 [Scanner] 构造会兜底，详见 [ScannerCore]）。
+ * 2. `Scanner(context, ScannerConfig())` 长生命周期持有（Application 级或 ViewModel）。
+ * 3. 相机帧经 [ScanFrame] 抽象传入 [analyze]；拍照请求交给宿主执行，
+ *    全分辨率照片走 [processCapture]（或直接使用 ScanCoordinator 编排层）。
+ * 4. `onDestroy` 时调用 [close]。
+ *
+ * 线程契约：所有公共操作内部串行化（synchronized），[analyze] 由相机分析线程调用，
+ * [processCapture] 是阻塞操作、需在 `Dispatchers.Default` 上调用。
+ * 所有权契约：[analyze] 不 recycle [ScanFrame.OfBitmap] 的位图，宿主自管；
+ * [processCapture] 消耗传入的 source 位图（成功后由内部回收）。
  */
-class ScanEngine(
+class Scanner(
     /** 应用 Context，仅用于读取 assets 和创建输出目录。 */
     private val appContext: Context,
-) {
+    /** 全部可调参数。 */
+    val config: ScannerConfig = ScannerConfig(),
+) : AutoCloseable {
 
     /** 经典边缘检测器（低对比度兜底未开启）。 */
-    private val detector = DocDetector()
+    private val detector = DocDetector(
+        config.detector.lowContrast,
+        config.detector.minAreaRatio,
+        config.detector.minSupport,
+    )
 
     /** 时序平滑、评分和拍摄状态机。 */
-    private val tracker = DocTracker()
+    private val tracker = DocTracker(config.tracker)
 
-    /** 陀螺仪角速度来源，用于判断手持是否稳定。 */
-    private val motion = MotionGate(appContext)
+    /** 手持稳定度来源。 */
+    private val motion: MotionSource =
+        config.motionSource ?: GyroscopeMotionSource(appContext)
 
     /** DocAligner 角点模型；null 表示尚未加载或加载失败。 */
     @Volatile
@@ -42,7 +56,7 @@ class ScanEngine(
     /** 检测耗时的 EMA（ms），显示在 HUD 上。 */
     private var emaMs = 33f
 
-    /** 已分析的帧数，用于控制角点模型每 3 帧跑一次。 */
+    /** 已分析的帧数，用于控制角点模型的调度。 */
     private var frames = 0
 
     /** 首帧尺寸日志只打一次。 */
@@ -64,13 +78,38 @@ class ScanEngine(
     @Volatile
     private var latestQuad: Quad? = null
 
+    init {
+        // 兜底：宿主若未在 Application 中调用 ScannerCore.init()，这里补一次。
+        // 幂等且开销极小，不影响已初始化的场景。
+        ScannerCore.init()
+    }
+
+    // ------------------------------------------------------------- open-cv init
+
+    /**
+     * 确认 OpenCV native 库已初始化（内部转调 [ScannerCore.init]，幂等）。
+     * 推荐宿主在 Application.onCreate 中提前调用 [ScannerCore.init]，
+     * 避免首个 Scanner 构造时才加载 native 库造成延迟尖峰。
+     * @return false 表示初始化失败，应提示用户而不是继续分析。
+     */
+    fun ensureOpenCv(): Boolean = ScannerCore.init()
+
+    // ------------------------------------------------------------------ motion
+
     fun startMotion() = motion.start()
 
     fun stopMotion() = motion.stop()
 
-    /** CameraX adapter entry point. Always closes [image]. */
+    // ---------------------------------------------------------------- analysis
+
+    /** Camera-frame adapter entry point. Accepts [ScanFrame.Rgba] or [ScanFrame.OfBitmap]. */
     @Synchronized
-    fun analyze(image: ImageProxy): FrameResult? {
+    fun analyze(frame: ScanFrame): FrameResult? = when (frame) {
+        is ScanFrame.Rgba -> analyzeRgba(frame)
+        is ScanFrame.OfBitmap -> analyzeBitmap(frame.bitmap)
+    }
+
+    private fun analyzeRgba(frame: ScanFrame.Rgba): FrameResult? {
         val now = SystemClock.elapsedRealtime()
         val dt = nextDelta(now)
         frames++
@@ -79,7 +118,10 @@ class ScanEngine(
         var bgr: Mat? = null
         var gray: Mat? = null
         return try {
-            rgba = ImageOps.imageToRgba(image)
+            rgba = ImageOps.rgbaFromBytes(
+                frame.data, frame.width, frame.height,
+                frame.rowStride, frame.rotationDegrees,
+            )
             bgr = Mat()
             Imgproc.cvtColor(rgba, bgr, Imgproc.COLOR_RGBA2BGR)
             gray = Mat()
@@ -89,7 +131,7 @@ class ScanEngine(
                 logged = true
                 Log.i(
                     TAG,
-                    "analysis src=${image.width}x${image.height} rot=${image.imageInfo.rotationDegrees}" +
+                    "analysis src=${frame.width}x${frame.height} rot=${frame.rotationDegrees}" +
                         " -> gray=${gray.cols()}x${gray.rows()}",
                 )
             }
@@ -101,13 +143,12 @@ class ScanEngine(
             rgba?.release()
             bgr?.release()
             gray?.release()
-            image.close()
         }
     }
 
     /**
      * Feeds a still bitmap through the same detection/tracking path as a camera
-     * frame. Used by the `--ez virtual true` debug hook.
+     * frame. Used by the virtual-camera debug loop.
      */
     @Synchronized
     fun analyzeBitmap(bitmap: Bitmap, omegaDeg: Float = 0f): FrameResult? {
@@ -147,14 +188,15 @@ class ScanEngine(
         }
         var source = if (det != null) "edge" else "none"
 
+        val modelCfg = config.model
         if (det == null) {
             val model = modelDetector
-            // The model costs ~150 ms: run it every third frame and coast on the
+            // The model costs ~150 ms: run it every Nth frame and coast on the
             // previous result in between so the box stays stable.
-            if (model != null && frames % 3 == 0) {
+            if (model != null && frames % modelCfg.runEveryNFrames == 0) {
                 val tModel = SystemClock.elapsedRealtime()
                 val result = try {
-                    val previous = if (frames - cachedModelFrame <= 9) cachedModelQuad else null
+                    val previous = if (frames - cachedModelFrame <= modelCfg.roiMaxAgeFrames) cachedModelQuad else null
                     model.detect(bgr, previous)
                 } catch (t: Throwable) {
                     Log.w(TAG, "model detection failed", t)
@@ -174,7 +216,7 @@ class ScanEngine(
                     cachedModelFrame = frames
                 }
             } else if (model != null && cachedModelQuad != null &&
-                frames - cachedModelFrame <= 6
+                frames - cachedModelFrame <= modelCfg.cacheMaxFrames
             ) {
                 val quad = cachedModelQuad!!
                 det = DocDetector.Detection(
@@ -203,6 +245,8 @@ class ScanEngine(
         return FrameResult(snapshot, gray.cols(), gray.rows(), emaMs)
     }
 
+    // -------------------------------------------------------------- model load
+
     /**
      * Loads the DocAligner ONNX model. Blocking; call from a worker thread.
      * Subsequent calls are cheap and return the cached result.
@@ -213,7 +257,12 @@ class ScanEngine(
 
         val t0 = SystemClock.elapsedRealtime()
         return try {
-            val loaded = DocModelDetector(appContext)
+            val loaded = DocModelDetector(
+                appContext,
+                config.model.assetName,
+                config.model.inferenceThreads,
+                config.model.debugLogs,
+            )
             modelDetector = loaded
             val ms = SystemClock.elapsedRealtime() - t0
             Log.i(TAG, "model loaded in $ms ms")
@@ -225,22 +274,27 @@ class ScanEngine(
         }
     }
 
+    // ------------------------------------------------------------ full-res path
+
     /** Full-resolution path: refine -> warp -> shadow removal -> JPEG. Blocking. */
     @Synchronized
     fun processCapture(source: Bitmap, quad: Quad, filter: ScanCapture.Filter): ScanCapture.Result {
         var bgr: Mat? = null
         return try {
             bgr = ImageOps.bitmapToBgr(source)
-            ScanCapture.process(bgr, quad, outputDir(), detector, filter)
+            ScanCapture.process(
+                bgr, quad, outputDir(), detector, filter,
+                config.output.jpegQuality,
+            )
         } finally {
             bgr?.release()
         }
     }
 
-    /** Offline check on the bundled image: detect -> refine -> warp -> save. Blocking. */
+    /** Offline check on a bundled asset: detect -> refine -> warp -> save. Blocking. */
     @Synchronized
-    fun runSelfTest(filter: ScanCapture.Filter): SelfTestResult {
-        val source = loadAssetBitmap("selftest.jpg")
+    fun runSelfTest(filter: ScanCapture.Filter, assetName: String = "selftest.jpg"): SelfTestResult {
+        val source = loadAssetBitmap(assetName)
             ?: return SelfTestResult.Failed("内置图片读取失败")
 
         var bgr: Mat? = null
@@ -257,7 +311,10 @@ class ScanEngine(
             if (detection == null) {
                 SelfTestResult.NoPaper(detectionMs)
             } else {
-                val scan = ScanCapture.process(bgr, detection.quad, outputDir(), detector, filter)
+                val scan = ScanCapture.process(
+                    bgr, detection.quad, outputDir(), detector, filter,
+                    config.output.jpegQuality,
+                )
                 Log.i(
                     TAG,
                     "selftest ok: support=${detection.support} area=${detection.areaRatio}" +
@@ -290,8 +347,14 @@ class ScanEngine(
         null
     }
 
+    /** JPEG 输出目录；来自 [OutputConfig.dir] 或应用外部私有目录。 */
     fun outputDir(): File =
-        File(appContext.getExternalFilesDir(null) ?: appContext.filesDir, "scans")
+        config.output.dir ?: File(
+            appContext.getExternalFilesDir(null) ?: appContext.filesDir,
+            "scans",
+        )
+
+    // ---------------------------------------------------------------- lifecycle
 
     @Synchronized
     fun reset() {
@@ -306,9 +369,10 @@ class ScanEngine(
     fun currentQuad(): Quad? = latestQuad?.copyOf()
 
     @Synchronized
-    fun close() {
+    override fun close() {
         modelDetector?.close()
         modelDetector = null
+        motion.stop()
     }
 
     private companion object {

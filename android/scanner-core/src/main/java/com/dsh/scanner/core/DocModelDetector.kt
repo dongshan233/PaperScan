@@ -1,4 +1,4 @@
-package com.dsh.scanner.model
+package com.dsh.scanner.core
 
 import ai.onnxruntime.OnnxTensor
 import ai.onnxruntime.OrtEnvironment
@@ -24,7 +24,15 @@ import java.nio.FloatBuffer
  * (white paper on a white desk). Its corners are only accurate to a few pixels
  * at 256 resolution, so they are always fed through DocDetector.refine().
  */
-class DocModelDetector(context: Context) {
+class DocModelDetector(
+    context: Context,
+    /** 模型资产文件名。 */
+    assetName: String,
+    /** 推理线程数。 */
+    threads: Int = 4,
+    /** 是否输出逐次推理的调试日志。 */
+    private val debugLogs: Boolean = false,
+) {
 
     companion object {
         /** 网络输入边长（正方形）。 */
@@ -35,8 +43,6 @@ class DocModelDetector(context: Context) {
 
         /** 角点峰值低于此值视为未检出。 */
         const val THRESHOLD = 0.15f
-
-        private const val ASSET = "docaligner_fastvit_t8.onnx"
     }
 
     /** 推理调用计数，每 10 次打一条日志。 */
@@ -49,9 +55,9 @@ class DocModelDetector(context: Context) {
     private val session: OrtSession
 
     init {
-        val bytes = context.assets.open(ASSET).readBytes()
+        val bytes = context.assets.open(assetName).readBytes()
         val opts = OrtSession.SessionOptions()
-        opts.setIntraOpNumThreads(4)
+        opts.setIntraOpNumThreads(threads)
         // CPU beats NNAPI on this SoC (147 ms vs 628 ms); keep NNAPI opt-in
         session = env.createSession(bytes, opts)
         android.util.Log.i("PaperScan", "model on CPU")
@@ -105,11 +111,13 @@ class DocModelDetector(context: Context) {
             chw[2 * plane + i] = (pixels[o + 2].toInt() and 0xFF) / 255f
         }
 
-        var sum = 0.0
-        var mn = 1f
-        var mx = 0f
-        for (v in chw) { sum += v; if (v < mn) mn = v; if (v > mx) mx = v }
-        android.util.Log.i("PaperScan", "model input mean=%.4f min=%.3f max=%.3f".format(sum / chw.size, mn, mx))
+        if (debugLogs) {
+            var sum = 0.0
+            var mn = 1f
+            var mx = 0f
+            for (v in chw) { sum += v; if (v < mn) mn = v; if (v > mx) mx = v }
+            android.util.Log.i("PaperScan", "model input mean=%.4f min=%.3f max=%.3f".format(sum / chw.size, mn, mx))
+        }
 
         val tensor = OnnxTensor.createTensor(
             env, FloatBuffer.wrap(chw),
@@ -127,12 +135,13 @@ class DocModelDetector(context: Context) {
         val inferMs = android.os.SystemClock.elapsedRealtime() - tRun
 
         val heat = (output.get(0) as OnnxTensor).floatBuffer
-        android.util.Log.i("PaperScan", "heat capacity=" + heat.capacity() + " limit=" + heat.limit() + " remaining=" + heat.remaining())
+        if (debugLogs) {
+            android.util.Log.i("PaperScan", "heat capacity=" + heat.capacity() + " limit=" + heat.limit() + " remaining=" + heat.remaining())
+        }
         val pts = arrayOfNulls<PointF>(4)
         var confidence = 0f
         var accepted = 0
         val peaks = FloatArray(4)
-        val t0 = android.os.SystemClock.elapsedRealtime()
         val scale = s.toFloat() / HEAT
 
         for (c in 0 until 4) {
@@ -186,7 +195,7 @@ class DocModelDetector(context: Context) {
         }
         output.close()
 
-        if (runs++ % 10 == 0) {
+        if (runs++ % 10 == 0 || debugLogs) {
             android.util.Log.i(
                 "PaperScan",
                 "model peaks=" + peaks.joinToString(",") { "%.2f".format(it) } +

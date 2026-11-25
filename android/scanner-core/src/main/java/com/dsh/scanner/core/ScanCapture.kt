@@ -1,4 +1,4 @@
-package com.dsh.scanner.model
+package com.dsh.scanner.core
 
 import android.graphics.Bitmap
 import org.opencv.core.Core
@@ -23,7 +23,7 @@ object ScanCapture {
     /** 竖版 A4 输出短边。 */
     const val A4_SHORT = 1240
 
-    /** 扫描件的色彩模式（应用默认 GRAY）；点按滤镜按钮按 COLOR → ENHANCE → GRAY 循环。 */
+    /** 扫描件的色彩模式；点按滤镜按钮按 COLOR → ENHANCE → GRAY 循环。 */
     enum class Filter {
         /** 原彩：只做透视矫正，不调色。 */
         COLOR,
@@ -31,7 +31,7 @@ object ScanCapture {
         /** 增强：LAB 只压平 L 通道，保留 a/b 色度，并轻微锐化。 */
         ENHANCE,
 
-        /** 黑白：灰度 + 背景除法 + 锐化，传统扫描件观感（应用默认）。 */
+        /** 黑白：灰度 + 背景除法 + 锐化，传统扫描件观感。 */
         GRAY;
 
         /** 返回循环中的下一个模式。 */
@@ -61,6 +61,7 @@ object ScanCapture {
      * @param outDir JPEG 输出目录，不存在会自动创建。
      * @param detector 提供 [DocDetector.refine] 的检测器实例。
      * @param filter 色彩模式，默认 [Filter.GRAY]。
+     * @param jpegQuality JPEG 压缩质量（0..100）。
      */
     fun process(
         src: Mat,
@@ -68,6 +69,7 @@ object ScanCapture {
         outDir: File,
         detector: DocDetector,
         filter: Filter = Filter.GRAY,
+        jpegQuality: Int = 92,
     ): Result {
         val gray = Mat()
         Imgproc.cvtColor(src, gray, Imgproc.COLOR_BGR2GRAY)
@@ -111,7 +113,7 @@ object ScanCapture {
         outDir.mkdirs()
         val file = File(outDir, "scan_${System.currentTimeMillis()}.jpg")
         val bmp = ImageOps.matToBitmap(enhanced)
-        FileOutputStream(file).use { bmp.compress(Bitmap.CompressFormat.JPEG, 92, it) }
+        FileOutputStream(file).use { bmp.compress(Bitmap.CompressFormat.JPEG, jpegQuality, it) }
         enhanced.release()
         return Result(bmp, file, refined)
     }

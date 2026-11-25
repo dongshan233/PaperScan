@@ -1,4 +1,4 @@
-package com.dsh.scanner.model
+package com.dsh.scanner.core
 
 import android.graphics.PointF
 import org.opencv.core.Core

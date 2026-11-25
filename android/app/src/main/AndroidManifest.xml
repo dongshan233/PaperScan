@@ -5,6 +5,7 @@
     <uses-feature android:name="android.hardware.camera.any" android:required="true" />
 
     <application
+        android:name=".ScannerApplication"
         android:allowBackup="true"
         android:label="@string/app_name"
         android:supportsRtl="true"

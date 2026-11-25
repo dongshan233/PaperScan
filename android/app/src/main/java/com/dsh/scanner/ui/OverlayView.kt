@@ -10,8 +10,8 @@ import android.graphics.RectF
 import android.util.AttributeSet
 import android.view.View
 import com.dsh.scanner.R
-import com.dsh.scanner.model.DocTracker
-import com.dsh.scanner.model.Quad
+import com.dsh.scanner.core.DocTracker
+import com.dsh.scanner.core.Quad
 import kotlin.math.min
 
 /** Draws the detected page outline plus the capture HUD over the preview. */

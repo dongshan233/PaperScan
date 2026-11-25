@@ -15,3 +15,4 @@ dependencyResolutionManagement {
 
 rootProject.name = "PaperScan"
 include(":app")
+include(":scanner-core")

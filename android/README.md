@@ -51,38 +51,51 @@ adb install -r -g app/build/outputs/apk/debug/app-debug.apk
 ## 架构（MVVM）
 
 ```
-┌──────────────────────── ui/（View）────────────────────────┐
+┌──────────────── ui/（View，app）────────────────────────────┐
 │ MainActivity       ViewBinding、权限、渲染 StateFlow、转发点击 │
 │ CameraController   CameraX 绑定 / 拍照 / EXIF 方向 / 手电筒    │
+│ CameraFrames       ImageProxy → ScanFrame 适配（唯一粘合点）  │
 │ OverlayView        四边形、角点、评分、倒计时（纯绘制）        │
 │ RectifyView        斜纸扶正动画 + 扫描件（纯绘制）             │
 └──────────▲──────────────────────────────────┬──────────────┘
            │ StateFlow<ScanUiState>            │ 用户意图
            │ Channel<ScanEvent>                ▼
-┌──────────┴──────────── viewmodel/ ─────────────────────────┐
-│ MainViewModel      识别/倒计时/冻结/拍照/结果页状态机          │
-│ ScanUiState        可渲染状态（状态文本、滤镜、手电筒、覆盖层）│
-│ ScanEvent          一次性事件（拍照、显示结果、虚拟帧）        │
-│ UiText             资源文本 + 参数，View 端最后 resolve        │
+┌──────────┴──────── viewmodel/（app，薄壳）──────────────────┐
+│ MainViewModel      只做映射/转发；识别决策在 ScanCoordinator  │
+│ ScanUiState        module 快照 + 宿主状态（手电筒）合并       │
+│ UiText             ScanStatus → strings.xml 文案映射          │
 └──────────▲──────────────────────────────────┬──────────────┘
-           │ FrameResult                       │ processCapture()
-┌──────────┴──────────────── model/ ─────────────────────────┐
-│ ScanEngine         CameraX 帧适配、模型加载、全分辨率处理      │
+           │ ScanSnapshot / ScanEvent          │ 动作转发
+┌──────────┴──────── :scanner-core（独立识别 module）─────────┐
+│ Scanner            门面：帧分析、模型加载、全分辨率处理        │
+│ ScanCoordinator    编排：帧驱动状态机、拍照互锁、结果交接      │
 │ DocDetector        经典边缘检测 + 亚像素精修                  │
 │ DocTracker         EMA 平滑、评分、倒计时                     │
 │ DocModelDetector   DocAligner 角点模型兜底                    │
 │ ScanCapture        透视矫正 + 去阴影 + JPEG                   │
+│ ScanFrame/Config   帧抽象与全部可配置项                      │
 └─────────────────────────────────────────────────────────────┘
 ```
 
-依赖方向始终是 `ui → viewmodel → model`：
+依赖方向始终是 `ui → viewmodel → scanner-core`：
 
 - **View** 不持有检测器/跟踪器，也不拼状态文案；点击只调用 ViewModel 方法。
-- **ViewModel** 不持有 Activity/View，也不创建或绑定 CameraX use case；相机帧通过
-  注入的 `ImageAnalysis.Analyzer` 进入，状态用 `StateFlow`，拍照/结果这类一次性
-  动作走 `Channel<ScanEvent>`。
-- **Model** 不依赖 UI；`ScanEngine` 串行化检测、跟踪和模型推理，避免多线程共享状态。
+- **ViewModel** 是薄壳：识别域决策（何时收帧、何时触发拍照、失败回退）都在
+  module 的 `ScanCoordinator` 里；ViewModel 只做 `ScanStatus → UiText` 映射和转发。
+- **scanner-core** 不依赖 CameraX、不引用宿主资源、不申请权限；相机帧经
+  `ScanFrame` 抽象进入，拍照以 `ScanEvent.CapturePhoto` 事件委托宿主执行。
 - 状态文案全部在 `res/values/strings.xml`，由 `UiText` 携带参数，View 负责解析。
+
+### 复用 scanner-core 到其他 MVVM 项目
+
+1. `include(":scanner-core")`（或发布 AAR 后 `implementation("com.dsh.scanner:scanner-core:x.y.z")`）。
+2. 构造 `Scanner(context, ScannerConfig(...))`（长生命周期持有）+ `ScanCoordinator(viewModelScope, scanner)`。
+3. 订阅 `coordinator.state` / `coordinator.events`，实现 `ScanEvent.CapturePhoto` 的拍照回调，
+   相机帧用 `CameraFrames.analyzer {}`（或自行实现 `ScanFrame` 构造）喂给 `coordinator.onCameraFrame`。
+4. OpenCV 初始化内置于 module：宿主在自定义 `Application.onCreate` 中调用
+   `ScannerCore.init()`（幂等；漏调时 `Scanner` 构造也会兜底）。宿主不再需要直接依赖 OpenCV。
+5. 宿主负责 CAMERA 权限与 ABI 过滤（`ndk.abiFilters`）；
+   模型与自检资产已随 module 的 assets 合并进 APK。
 
 ## 代码结构
 
@@ -90,20 +103,24 @@ adb install -r -g app/build/outputs/apk/debug/app-debug.apk
 |---|---|
 | `ui/MainActivity.kt` | View：ViewBinding、权限、观察状态、渲染与事件分发 |
 | `ui/CameraController.kt` | CameraX 绑定、拍照、EXIF 旋转、手电筒、分析流暂停/恢复；分析流 `RGBA_8888` 输出 + `KEEP_ONLY_LATEST`，拍照缓存 `cacheDir/shot.jpg` 用后即删，`MINIMIZE_LATENCY` 模式 |
-| `viewmodel/MainViewModel.kt` | ViewModel：扫描状态机、自动/手动拍照、结果事件、调试入口 |
-| `viewmodel/ScanUiState.kt` | `StateFlow` 状态、覆盖层帧、滤镜文案映射 |
-| `viewmodel/ScanEvent.kt` | 一次性事件：拍照、显示结果、虚拟帧 |
+| `ui/CameraFrames.kt` | ImageProxy → `ScanFrame` 适配器（识别核心与 CameraX 解耦的唯一粘合点） |
+| `viewmodel/MainViewModel.kt` | 薄壳 ViewModel：转发用户动作、合并宿主状态、托管 Scanner 生命周期 |
+| `viewmodel/ScanUiState.kt` | `ScanSnapshot`/`ScanStatus` → 可渲染状态与 `strings.xml` 文案的映射 |
 | `viewmodel/UiText.kt` | 字符串资源/原始文本，View 端 `resolve()` |
-| `model/ScanEngine.kt` | 模型层：帧分析、模型加载、全分辨率处理、自检 |
-| `model/DocDetector.kt` | 光照归一化 → Canny → 轮廓 → 四点凸四边形 → 边缘支撑评分 → 亚像素直线精修 |
-| `model/DocTracker.kt` | EMA 平滑、评分（支撑/面积/稳定度/IMU/清晰度/规整度）、倒计时状态机 |
-| `model/ScanCapture.kt` | 全分辨率精修 → 透视变换到 A4（竖版 1240×1754 / 横版 1754×1240）→ 去阴影 + 锐化 → JPEG（质量 92，`scan_<时间戳>.jpg`） |
-| `model/ScanModels.kt` | 数据模型：`FrameResult`、`ModelLoadResult`、`SelfTestResult` |
-| `model/Geometry.kt` | `Quad` 几何工具：角点排序、面积、矩形度等 |
+| `scanner-core/core/Scanner.kt` | 门面：`ScanFrame` 帧分析、模型加载、全分辨率处理、自检，串行化全部操作 |
+| `scanner-core/core/ScanCoordinator.kt` | 编排层：帧驱动状态机、拍照互锁（capturing/frozen/acceptingFrames）、结果交接、调试入口 |
+| `scanner-core/core/DocDetector.kt` | 光照归一化 → Canny → 轮廓 → 四点凸四边形 → 边缘支撑评分 → 亚像素直线精修 |
+| `scanner-core/core/DocTracker.kt` | EMA 平滑、评分（支撑/面积/稳定度/IMU/清晰度/规整度）、倒计时状态机 |
+| `scanner-core/core/ScanCapture.kt` | 全分辨率精修 → 透视变换到 A4（竖版 1240×1754 / 横版 1754×1240）→ 去阴影 + 锐化 → JPEG（默认质量 92，`scan_<时间戳>.jpg`） |
+| `scanner-core/core/ScanStatus.kt` | 对外契约：`ScanSnapshot`、`ScanStatus`（语义枚举）、`ScanEvent`、`OverlayFrame` |
+| `scanner-core/core/ScannerConfig.kt` | 全部可配置项：Tracker/Detector/Model/Output，默认值为真机调参结果 |
+| `scanner-core/core/ScanFrame.kt` | 帧输入抽象（RGBA 字节流 / Bitmap），module 不依赖 CameraX |
+| `scanner-core/core/MotionSource.kt` | 手持稳定度来源接口 + 硬件陀螺仪默认实现 |
+| `scanner-core/core/ScanModels.kt` | 数据模型：`FrameResult`、`ModelLoadResult`、`SelfTestResult` |
+| `scanner-core/core/Geometry.kt` | `Quad` 几何工具：角点排序、面积、矩形度等 |
 | `ui/OverlayView.kt` | 四边形、角点、评分条、倒计时环、状态文案 |
 | `ui/RectifyView.kt` | 结果页：把检测到的斜四边形插值到正视矩形做透视动画，再叠化到扫描件 |
-| `model/MotionGate.kt` | 陀螺仪角速度（用于"手持是否稳定"判定） |
-| `model/ImageOps.kt` | YUV→Mat、金字塔背景、Laplacian 方差、Bitmap 互转 |
+| `scanner-core/core/ImageOps.kt` | RGBA 字节→Mat、金字塔背景、Laplacian 方差、Bitmap 互转 |
 
 ## 关键参数
 

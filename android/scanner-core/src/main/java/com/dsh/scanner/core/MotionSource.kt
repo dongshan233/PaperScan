@@ -1,4 +1,4 @@
-package com.dsh.scanner.model
+package com.dsh.scanner.core
 
 import android.content.Context
 import android.hardware.Sensor
@@ -7,8 +7,26 @@ import android.hardware.SensorEventListener
 import android.hardware.SensorManager
 import kotlin.math.sqrt
 
-/** Gyroscope magnitude in deg/s, EMA-smoothed. 0 when no sensor is present. */
-class MotionGate(context: Context) : SensorEventListener {
+/**
+ * 手持稳定度来源：为识别状态机提供陀螺仪角速度（°/s）。
+ *
+ * 默认实现 [GyroscopeMotionSource] 读取硬件陀螺仪；宿主也可以注入自己的
+ * 实现（例如 IMU 融合结果、伪角速度用于测试）。
+ */
+interface MotionSource {
+
+    /** 开始接收运动数据。 */
+    fun start()
+
+    /** 停止接收运动数据（宿主应在 onPause 调用以省电）。 */
+    fun stop()
+
+    /** 当前角速度模长的 EMA（°/s）；无数据时为 0。 */
+    val angularSpeedDeg: Float
+}
+
+/** 硬件陀螺仪实现：三轴角速度模长 EMA 平滑；设备无陀螺仪时恒为 0。 */
+class GyroscopeMotionSource(context: Context) : MotionSource, SensorEventListener {
 
     /** 传感器管理器；设备不提供时为 null。 */
     private val manager =
@@ -19,14 +37,14 @@ class MotionGate(context: Context) : SensorEventListener {
 
     /** 三轴角速度模长的 EMA（°/s），无传感器时保持 0。 */
     @Volatile
-    var angularSpeedDeg: Float = 0f
+    override var angularSpeedDeg: Float = 0f
         private set
 
-    fun start() {
+    override fun start() {
         sensor?.let { manager?.registerListener(this, it, SensorManager.SENSOR_DELAY_GAME) }
     }
 
-    fun stop() {
+    override fun stop() {
         manager?.unregisterListener(this)
     }
 

@@ -14,14 +14,14 @@ import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
 import com.dsh.scanner.R
+import com.dsh.scanner.core.ScanEvent
+import com.dsh.scanner.core.ScannerCore
 import com.dsh.scanner.databinding.ActivityMainBinding
 import com.dsh.scanner.viewmodel.MainViewModel
-import com.dsh.scanner.viewmodel.ScanEvent
 import com.dsh.scanner.viewmodel.ScanUiState
 import com.dsh.scanner.viewmodel.labelRes
 import com.dsh.scanner.viewmodel.resolve
 import kotlinx.coroutines.launch
-import org.opencv.android.OpenCVLoader
 
 /**
  * MVVM View: inflates the layout, owns CameraX and renders [ScanUiState].
@@ -64,7 +64,9 @@ class MainActivity : AppCompatActivity() {
         binding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
 
-        val openCvReady = OpenCVLoader.initLocal()
+        // OpenCV 已在 ScannerApplication.onCreate 中通过 ScannerCore.init() 初始化；
+        // 这里再调一次是幂等的兜底（例如宿主漏注册 Application 时）。
+        val openCvReady = ScannerCore.init()
 
         viewModel = ViewModelProvider(
             this,
